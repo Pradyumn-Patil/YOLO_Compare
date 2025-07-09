@@ -1,84 +1,173 @@
-YOLO Model Comparison Tool
-This Flask application provides a web interface to upload images and compare the performance of two different YOLOv8 models for object detection. It is specifically tailored to analyze detections for 'football' and 'cone' classes but can be adapted for others.
+# 🏈 YOLO Model Comparison Tool
 
-Features
-Web-Based UI: Simple and clean interface for uploading multiple images.
+<div align="center">
+  <img src="https://img.shields.io/badge/Python-3.8+-blue.svg" alt="Python Version">
+  <img src="https://img.shields.io/badge/Flask-2.0+-green.svg" alt="Flask Version">
+  <img src="https://img.shields.io/badge/YOLOv8-Ultralytics-orange.svg" alt="YOLO Version">
+  <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License">
+</div>
 
-Side-by-Side Comparison: View the output of both models on each image. Bounding boxes from Model 1 are green, and Model 2 are blue.
+<br>
 
-Detailed Analytics: For each image, see the number of detections and average confidence score for each model.
+A **powerful Flask web application** that provides an intuitive interface to upload images and compare the performance of two different YOLOv8 models for object detection. Specifically tailored for analyzing **'football'** and **'cone'** detections, but easily adaptable for other object classes.
 
-Performance Winner: A simple algorithm determines which model performed "better" on a per-image basis.
+---
 
-Overall Summary: Get aggregate statistics across all uploaded images, including total detections, overall average confidence, and the number of images "won" by each model.
+## ✨ Features
 
-Project Structure
-/
-|-- app.py                  # The main Flask application
-|-- requirements.txt        # Python dependencies
-|-- README.md               # This file
-|
-|-- models/                 # FOLDER: Place your YOLO models here
-|   |-- best_model_1.pt     # Your first model
-|   `-- best_model_2.pt     # Your second model
-|
-|-- templates/              # FOLDER: Contains HTML templates
-|   `-- index.html          # The main web page
-|
-|-- static/                 # FOLDER: Will be created automatically
-    |-- uploads/            # For original uploaded images
-    `-- processed/          # For images with bounding boxes
+### 🖥️ **Web-Based Interface**
+- Clean, modern UI for uploading multiple images
+- Drag-and-drop functionality for seamless file uploads
+- Real-time progress tracking during analysis
 
-Setup and Installation
-Clone the repository or download the files.
+### 🔄 **Side-by-Side Comparison**
+- Visual comparison of both models on each image
+- **Color-coded bounding boxes**: 
+  - 🟢 **Green** for Model 1 detections
+  - 🔵 **Blue** for Model 2 detections
 
-Create a Python virtual environment (recommended):
+### 📊 **Detailed Analytics**
+- **Per-image statistics**: Detection counts and confidence scores
+- **Class-specific analysis**: Individual metrics for each object type
+- **Speed benchmarks**: Preprocessing, inference, and postprocessing times
 
+### 🏆 **Performance Winner**
+- Intelligent algorithm determines the better-performing model
+- **Scoring system** based on detection accuracy and confidence
+- Per-image and overall performance rankings
+
+### 📈 **Comprehensive Summary**
+- **Aggregate statistics** across all uploaded images
+- Total detections and average confidence scores
+- Model comparison with detailed breakdowns
+
+---
+
+## 📁 Project Structure
+
+```
+📦 YOLO-Model-Comparison-Tool/
+├── 🐍 app.py                  # Main Flask application
+├── 📋 requirements.txt        # Python dependencies
+├── 📖 README.md               # Documentation
+├── 
+├── 📁 models/                 # 🔴 IMPORTANT: Place your models here
+│   ├── 🎯 best_model_1.pt     # Your first YOLO model
+│   └── 🎯 best_model_2.pt     # Your second YOLO model
+├── 
+├── 📁 templates/              # HTML templates
+│   └── 🌐 index.html          # Main web interface
+├── 
+└── 📁 static/                 # Auto-generated folders
+    ├── 📁 uploads/            # Original uploaded images
+    └── 📁 processed/          # Images with bounding boxes
+```
+
+---
+
+## 🚀 Setup and Installation
+
+### 1️⃣ **Get the Code**
+```bash
+git clone <repository-url>
+cd MODEL_TEST_APP
+```
+
+### 2️⃣ **Create Virtual Environment**
+```bash
 python -m venv venv
-source venv/bin/activate  # On Windows use `venv\Scripts\activate`
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
 
-Install the required dependencies:
-
+### 3️⃣ **Install Dependencies**
+```bash
 pip install -r requirements.txt
+```
 
-Place your models:
+### 4️⃣ **Prepare Your Models**
+- Create a `models/` folder in the root directory
+- Place your trained YOLOv8 model files (`.pt`) inside
+- **⚠️ IMPORTANT**: Rename them to:
+  - `best_model_1.pt`
+  - `best_model_2.pt`
 
-Create a folder named models in the root directory.
-
-Place your two trained YOLOv8 model files (.pt) inside the models folder.
-
-Crucially, you must rename them to best_model_1.pt and best_model_2.pt.
-
-Run the Flask application:
-
-flask run
-
-Or for development mode:
-
+### 5️⃣ **Launch the Application**
+```bash
+# Development mode
 python app.py
 
-Access the application:
-Open your web browser and navigate to http://127.0.0.1:5000.
+# Or using Flask command
+flask run
+```
 
-How to Use
-Navigate to the web interface.
+### 6️⃣ **Access the Interface**
+Open your browser and navigate to: **http://127.0.0.1:5000**
 
-Click the "Upload" area or drag and drop your test images (PNG, JPG, JPEG).
+---
 
-Once files are selected, click the "Analyze Performance" button.
+## 🎯 How to Use
 
-Wait for the analysis to complete. The time taken will depend on the number of images and the complexity of the models.
+| Step | Action | Description |
+|------|--------|-------------|
+| 1️⃣ | **Upload** | Navigate to the web interface and upload your test images |
+| 2️⃣ | **Select** | Choose multiple images (PNG, JPG, JPEG) via drag-drop or click |
+| 3️⃣ | **Analyze** | Click "Analyze Performance" to start the comparison |
+| 4️⃣ | **Wait** | Processing time depends on image count and model complexity |
+| 5️⃣ | **Review** | Examine detailed results and overall performance summary |
 
-Review the results, which are broken down into an overall summary and a detailed card for each image.
+---
 
-How the Comparison Works
-The application determines a "better" model for each image based on a simple scoring system:
+## 🏆 Comparison Methodology
 
-+1 point to the model with more total detections.
+Our intelligent scoring system evaluates models based on:
 
-+1 point to the model with a higher average confidence score across all detections.
+### 📊 **Scoring Criteria**
 
-+0.5 points to the model that detects more of each specific class ('football', 'cone').
+| Metric | Points | Description |
+|--------|--------|-------------|
+| 🎯 **Total Detections** | +1.0 | Model with more overall detections |
+| 🎖️ **Average Confidence** | +1.0 | Model with higher confidence scores |
+| ⚡ **Inference Speed** | +1.0 | Model with faster processing time |
+| 🏈 **Football Detections** | +0.5 | Model detecting more footballs |
+| 🚧 **Cone Detections** | +0.5 | Model detecting more cones |
 
-The model with the higher total score is declared the winner for that image. This is a basic heuristic and does not replace a rigorous evaluation with a labeled ground truth dataset, but it provides a quick and useful first-pass comparison.
+### 🏅 **Winner Determination**
+- Model with **highest total score** wins each image
+- **Tie-breaker**: Similar performance noted
+- **Overall champion**: Model winning most images
 
+> 💡 **Note**: This is a heuristic evaluation tool and doesn't replace rigorous testing with labeled ground truth datasets.
+
+---
+
+## 📊 Performance Metrics
+
+The application tracks and displays:
+
+- ⏱️ **Processing Speed**: Preprocess, inference, and postprocess times
+- 🎯 **Detection Accuracy**: Count and confidence for each class
+- 📈 **Comparative Analysis**: Side-by-side model performance
+- 🏆 **Winner Statistics**: Per-image and overall rankings
+
+---
+
+## 🔧 Technical Requirements
+
+- **Python**: 3.8 or higher
+- **Flask**: 2.0+
+- **OpenCV**: For image processing
+- **Ultralytics**: For YOLO model support
+- **NumPy**: For numerical operations
+
+---
+
+## 📝 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+---
+
+<div align="center">
+  <p>Made with ❤️ for computer vision enthusiasts</p>
+  <p>⭐ Star this repo if you find it useful!</p>
+</div>
