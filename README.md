@@ -1,173 +1,260 @@
-# 🏈 YOLO Model Comparison Tool
+# Enhanced YOLO Model Comparison System
 
-<div align="center">
-  <img src="https://img.shields.io/badge/Python-3.8+-blue.svg" alt="Python Version">
-  <img src="https://img.shields.io/badge/Flask-2.0+-green.svg" alt="Flask Version">
-  <img src="https://img.shields.io/badge/YOLOv8-Ultralytics-orange.svg" alt="YOLO Version">
-  <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License">
-</div>
+## Overview
 
-<br>
+This enhanced version of the YOLO model comparison system includes sophisticated class mapping capabilities that ensure fair comparison between different models, even when they have different class definitions or naming conventions.
 
-A **powerful Flask web application** that provides an intuitive interface to upload images and compare the performance of two different YOLOv8 models for object detection. Specifically tailored for analyzing **'football'** and **'cone'** detections, but easily adaptable for other object classes.
+## Key Features
 
----
+### 🎯 **Class Mapping System**
+- **Standardized Classes**: Maps different model classes to standardized names
+- **Flexible Aliases**: Handles alternative class names (e.g., "ball" → "football")
+- **Selective Comparison**: Choose which specific classes to compare
+- **Multiple Domains**: Pre-configured for football, traffic, medical, and general detection
 
-## ✨ Features
+### 🔧 **Configuration Interface**
+- **Web-based Setup**: Configure mappings directly in the browser
+- **Real-time Updates**: Apply configuration changes without restarting
+- **Visual Feedback**: Clear indication of selected classes and mappings
 
-### 🖥️ **Web-Based Interface**
-- Clean, modern UI for uploading multiple images
-- Drag-and-drop functionality for seamless file uploads
-- Real-time progress tracking during analysis
+### 📊 **Fair Comparison**
+- **Normalized Results**: Only compares selected classes across models
+- **Consistent Metrics**: Standardized confidence scores and detection counts
+- **Filtered Visualization**: Bounding boxes only show selected classes
 
-### 🔄 **Side-by-Side Comparison**
-- Visual comparison of both models on each image
-- **Color-coded bounding boxes**: 
-  - 🟢 **Green** for Model 1 detections
-  - 🔵 **Blue** for Model 2 detections
+## Installation & Setup
 
-### 📊 **Detailed Analytics**
-- **Per-image statistics**: Detection counts and confidence scores
-- **Class-specific analysis**: Individual metrics for each object type
-- **Speed benchmarks**: Preprocessing, inference, and postprocessing times
-
-### 🏆 **Performance Winner**
-- Intelligent algorithm determines the better-performing model
-- **Scoring system** based on detection accuracy and confidence
-- Per-image and overall performance rankings
-
-### 📈 **Comprehensive Summary**
-- **Aggregate statistics** across all uploaded images
-- Total detections and average confidence scores
-- Model comparison with detailed breakdowns
-
----
-
-## 📁 Project Structure
-
-```
-📦 YOLO-Model-Comparison-Tool/
-├── 🐍 app.py                  # Main Flask application
-├── 📋 requirements.txt        # Python dependencies
-├── 📖 README.md               # Documentation
-├── 
-├── 📁 models/                 # 🔴 IMPORTANT: Place your models here
-│   ├── 🎯 best_model_1.pt     # Your first YOLO model
-│   └── 🎯 best_model_2.pt     # Your second YOLO model
-├── 
-├── 📁 templates/              # HTML templates
-│   └── 🌐 index.html          # Main web interface
-├── 
-└── 📁 static/                 # Auto-generated folders
-    ├── 📁 uploads/            # Original uploaded images
-    └── 📁 processed/          # Images with bounding boxes
-```
-
----
-
-## 🚀 Setup and Installation
-
-### 1️⃣ **Get the Code**
+### 1. Install Dependencies
 ```bash
-git clone <repository-url>
-cd MODEL_TEST_APP
+pip install flask ultralytics opencv-python numpy werkzeug
 ```
 
-### 2️⃣ **Create Virtual Environment**
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+### 2. Project Structure
+```
+project/
+├── app.py                 # Main Flask application
+├── config.py             # Configuration file (optional)
+├── templates/
+│   └── index.html        # Web interface
+├── static/
+│   ├── uploads/          # Uploaded files
+│   └── processed/        # Processed results
+└── models/               # Place your model files here
+    ├── model1.pt         # First model
+    └── model2.pt         # Second model
 ```
 
-### 3️⃣ **Install Dependencies**
-```bash
-pip install -r requirements.txt
+### 3. Model Setup
+Place your YOLO model files (.pt or .onnx) in the `models/` directory. The system will automatically detect and assign them as Model 1 and Model 2.
+
+## Usage Guide
+
+### 1. Configure Class Mappings
+
+#### Option A: Use Web Interface
+1. Start the application: `python app.py`
+2. Open http://localhost:5000
+3. In the "Model Configuration" section:
+   - Select the appropriate detection type (Football, Traffic, etc.)
+   - Choose which classes to compare
+   - Click "Apply Configuration"
+
+#### Option B: Modify Configuration Code
+Edit the `CLASS_MAPPINGS` dictionary in `app.py`:
+
+```python
+CLASS_MAPPINGS = {
+    'your_custom_detection': {
+        'standard_classes': ['class1', 'class2', 'class3'],
+        'model_mappings': {
+            'model_type_1': {
+                0: 'class1',
+                1: 'class2',
+                2: 'class3'
+            }
+        },
+        'class_aliases': {
+            'alternative_name': 'class1',
+            'another_name': 'class2'
+        }
+    }
+}
 ```
 
-### 4️⃣ **Prepare Your Models**
-- Create a `models/` folder in the root directory
-- Place your trained YOLOv8 model files (`.pt`) inside
-- **⚠️ IMPORTANT**: Rename them to:
-  - `best_model_1.pt`
-  - `best_model_2.pt`
+### 2. Upload and Compare
 
-### 5️⃣ **Launch the Application**
-```bash
-# Development mode
-python app.py
+1. **Select Media Type**: Choose between Images or Videos
+2. **Upload Files**: Select your test files
+3. **Run Analysis**: Click "Analyze Performance"
+4. **View Results**: Compare model performance across selected classes
 
-# Or using Flask command
-flask run
+## Class Mapping Examples
+
+### Football Detection
+```python
+'football_detection': {
+    'standard_classes': ['football', 'cone', 'player', 'goalpost'],
+    'model_mappings': {
+        'yolov8_football': {
+            0: 'football',
+            1: 'cone',
+            2: 'player',
+            3: 'goalpost'
+        },
+        'custom_model': {
+            0: 'ball',      # → 'football'
+            1: 'marker',    # → 'cone'
+            2: 'person',    # → 'player'
+            3: 'goal'       # → 'goalpost'
+        }
+    },
+    'class_aliases': {
+        'ball': 'football',
+        'marker': 'cone',
+        'person': 'player',
+        'goal': 'goalpost'
+    }
+}
 ```
 
-### 6️⃣ **Access the Interface**
-Open your browser and navigate to: **http://127.0.0.1:5000**
+### Traffic Detection
+```python
+'traffic_detection': {
+    'standard_classes': ['car', 'truck', 'bus', 'motorcycle', 'bicycle', 'person'],
+    'model_mappings': {
+        'coco_traffic': {
+            2: 'car',
+            7: 'truck',
+            5: 'bus',
+            3: 'motorcycle',
+            1: 'bicycle',
+            0: 'person'
+        }
+    },
+    'class_aliases': {
+        'vehicle': 'car',
+        'motorbike': 'motorcycle',
+        'bike': 'bicycle'
+    }
+}
+```
 
----
+## API Endpoints
 
-## 🎯 How to Use
+### Get Current Configuration
+```
+GET /get_class_mappings
+```
+Returns current mapping configuration and selected classes.
 
-| Step | Action | Description |
-|------|--------|-------------|
-| 1️⃣ | **Upload** | Navigate to the web interface and upload your test images |
-| 2️⃣ | **Select** | Choose multiple images (PNG, JPG, JPEG) via drag-drop or click |
-| 3️⃣ | **Analyze** | Click "Analyze Performance" to start the comparison |
-| 4️⃣ | **Wait** | Processing time depends on image count and model complexity |
-| 5️⃣ | **Review** | Examine detailed results and overall performance summary |
+### Update Configuration
+```
+POST /set_class_mapping
+Content-Type: application/json
 
----
+{
+    "mapping_name": "football_detection",
+    "selected_classes": ["football", "cone"]
+}
+```
 
-## 🏆 Comparison Methodology
+### Upload and Analyze
+```
+POST /upload
+Content-Type: multipart/form-data
 
-Our intelligent scoring system evaluates models based on:
+files[]: [uploaded files]
+media_type: "images" or "videos"
+```
 
-### 📊 **Scoring Criteria**
+## Advanced Features
 
-| Metric | Points | Description |
-|--------|--------|-------------|
-| 🎯 **Total Detections** | +1.0 | Model with more overall detections |
-| 🎖️ **Average Confidence** | +1.0 | Model with higher confidence scores |
-| ⚡ **Inference Speed** | +1.0 | Model with faster processing time |
-| 🏈 **Football Detections** | +0.5 | Model detecting more footballs |
-| 🚧 **Cone Detections** | +0.5 | Model detecting more cones |
+### 1. Model Type Auto-Detection
+The system attempts to automatically detect model types based on filename patterns:
+- `yolov8_football.pt` → Football detection mapping
+- `coco_trained.pt` → COCO mapping
+- `traffic_model.pt` → Traffic detection mapping
 
-### 🏅 **Winner Determination**
-- Model with **highest total score** wins each image
-- **Tie-breaker**: Similar performance noted
-- **Overall champion**: Model winning most images
+### 2. Confidence Filtering
+Results are filtered to only show detections for selected classes, ensuring fair comparison.
 
-> 💡 **Note**: This is a heuristic evaluation tool and doesn't replace rigorous testing with labeled ground truth datasets.
+### 3. Flexible Aliases
+The alias system handles various naming conventions:
+- "ball" → "football"
+- "person" → "player"
+- "vehicle" → "car"
 
----
+### 4. Performance Metrics
+- **Detection Count**: Number of objects detected per class
+- **Confidence Scores**: Average confidence per class
+- **Speed Metrics**: Inference time comparison
+- **Overall Winner**: Determined by multiple factors
 
-## 📊 Performance Metrics
+## Troubleshooting
 
-The application tracks and displays:
+### Common Issues
 
-- ⏱️ **Processing Speed**: Preprocess, inference, and postprocess times
-- 🎯 **Detection Accuracy**: Count and confidence for each class
-- 📈 **Comparative Analysis**: Side-by-side model performance
-- 🏆 **Winner Statistics**: Per-image and overall rankings
+1. **"Model files not found"**
+   - Ensure model files are in the `models/` directory
+   - Check file extensions (.pt or .onnx)
 
----
+2. **"No detections found"**
+   - Verify class mapping is correct
+   - Check if selected classes exist in model output
+   - Lower confidence threshold if needed
 
-## 🔧 Technical Requirements
+3. **"Configuration not applied"**
+   - Ensure at least one class is selected
+   - Check browser console for errors
+   - Refresh page and try again
 
-- **Python**: 3.8 or higher
-- **Flask**: 2.0+
-- **OpenCV**: For image processing
-- **Ultralytics**: For YOLO model support
-- **NumPy**: For numerical operations
+### Debug Mode
+Enable debug output by modifying the class mapping functions to print intermediate results:
 
----
+```python
+def map_model_classes(model, mapping_config, selected_classes):
+    print(f"Model classes: {model.names}")
+    print(f"Selected classes: {selected_classes}")
+    # ... rest of function
+```
 
-## 📝 License
+## Customization
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+### Adding New Detection Types
+1. Add a new entry to `CLASS_MAPPINGS`
+2. Define standard classes and model mappings
+3. Include relevant aliases
+4. Update the web interface if needed
 
----
+### Modifying Comparison Logic
+Edit the `compare_models()` function to adjust how models are ranked:
+- Weight different metrics differently
+- Add new comparison criteria
+- Customize scoring system
 
-<div align="center">
-  <p>Made with ❤️ for computer vision enthusiasts</p>
-  <p>⭐ Star this repo if you find it useful!</p>
-</div>
+### Styling Changes
+Modify the CSS in `index.html` to customize:
+- Color schemes
+- Layout
+- Typography
+- Animations
+
+## Future Enhancements
+
+- **Multi-model Support**: Compare more than 2 models
+- **Custom Metrics**: User-defined comparison criteria
+- **Export Results**: Save comparisons as reports
+- **Model Training Integration**: Direct training feedback
+- **Advanced Filtering**: Confidence thresholds, size filters
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Add your enhancements
+4. Test thoroughly
+5. Submit a pull request
+
+## License
+
+This project is open source and available under the MIT License.

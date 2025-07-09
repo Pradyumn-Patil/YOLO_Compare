@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YOLO Model Comparison</title>
+    <title>Enhanced YOLO Model Comparison</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -15,6 +16,10 @@
             border-radius: 0.75rem;
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
             transition: all 0.3s ease-in-out;
+        }
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
         }
         .loader {
             border: 8px solid #f3f3f3;
@@ -34,39 +39,206 @@
             padding: 0.5rem 1rem;
             border-radius: 0.5rem;
         }
-        .winner-model1 { background-color: #dcfce7; color: #166534; } /* Green */
-        .winner-model2 { background-color: #dbeafe; color: #1e40af; } /* Blue */
+        .winner-model1 { background-color: #dcfce7; color: #166534; }
+        .winner-model2 { background-color: #dbeafe; color: #1e40af; }
         .winner-tie { background-color: #f3f4f6; color: #4b5563; }
         .winner-none { background-color: #fee2e2; color: #991b1b; }
+        .tab-button {
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        .tab-active {
+            background-color: #3b82f6;
+            color: white;
+        }
+        .tab-inactive {
+            background-color: #f3f4f6;
+            color: #6b7280;
+        }
+        .tab-inactive:hover {
+            background-color: #e5e7eb;
+        }
+        .class-checkbox {
+            width: 1.25rem;
+            height: 1.25rem;
+            border-radius: 0.25rem;
+            border: 2px solid #d1d5db;
+            background-color: white;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .class-checkbox:checked {
+            background-color: #3b82f6;
+            border-color: #3b82f6;
+        }
+        .mapping-selector {
+            border: 2px solid #d1d5db;
+            border-radius: 0.5rem;
+            padding: 0.5rem;
+            transition: all 0.2s ease;
+        }
+        .mapping-selector:hover {
+            border-color: #3b82f6;
+        }
+        .mapping-selector.active {
+            border-color: #3b82f6;
+            background-color: #eff6ff;
+        }
+        .config-section {
+            border: 2px solid #e5e7eb;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+        }
+        .metric-card {
+            background: linear-gradient(135deg, #ffffff 0%, #f9fafb 100%);
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            transition: all 0.3s ease;
+        }
+        .metric-card:hover {
+            border-color: #3b82f6;
+            transform: translateY(-1px);
+        }
+        .performance-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+        }
+        .progress-bar {
+            height: 0.5rem;
+            background-color: #e5e7eb;
+            border-radius: 0.25rem;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background-color: #3b82f6;
+            transition: width 0.3s ease;
+        }
+        .batch-upload-area {
+            border: 3px dashed #d1d5db;
+            border-radius: 0.75rem;
+            padding: 3rem;
+            text-align: center;
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            transition: all 0.3s ease;
+        }
+        .batch-upload-area:hover {
+            border-color: #3b82f6;
+            background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+        }
+        .batch-upload-area.dragover {
+            border-color: #1d4ed8;
+            background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+        }
+        .file-preview {
+            display: flex;
+            align-items: center;
+            padding: 0.5rem;
+            background-color: #f3f4f6;
+            border-radius: 0.375rem;
+            margin-bottom: 0.5rem;
+        }
+        .file-preview img {
+            width: 3rem;
+            height: 3rem;
+            object-fit: cover;
+            border-radius: 0.25rem;
+            margin-right: 0.75rem;
+        }
+        .report-section {
+            background: linear-gradient(135deg, #fef3c7 0%, #fbbf24 100%);
+            border: 2px solid #f59e0b;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            margin-top: 2rem;
+        }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800">
 
     <div class="container mx-auto px-4 py-8">
         <header class="text-center mb-12">
-            <h1 class="text-4xl font-bold text-gray-900">YOLOv8 Model Performance Analyzer</h1>
-            <p class="mt-2 text-lg text-gray-600">Compare two models for football and cone detection.</p>
+            <h1 class="text-4xl font-bold text-gray-900 mb-2">Enhanced YOLO Model Performance Analyzer</h1>
+            <p class="text-lg text-gray-600 mb-4">Advanced comparison tool for object detection models with comprehensive analytics</p>
+            <div class="flex justify-center space-x-4">
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                    Batch Processing
+                </span>
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
+                    Performance Metrics
+                </span>
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-800">
+                    PDF Reports
+                </span>
+            </div>
         </header>
 
-        <div id="upload-section" class="card p-8 max-w-3xl mx-auto">
-            <h2 class="text-2xl font-semibold mb-4 text-center">Upload Test Images</h2>
+        <div id="config-section" class="config-section max-w-4xl mx-auto mb-8">
+            <h2 class="text-2xl font-semibold mb-6 text-center">Model Configuration</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <h3 class="text-lg font-semibold mb-3">Detection Type</h3>
+                    <div id="mapping-options" class="space-y-2">
+                        </div>
+                </div>
+                
+                <div>
+                    <h3 class="text-lg font-semibold mb-3">Classes to Compare</h3>
+                    <div id="class-options" class="space-y-2">
+                        </div>
+                    <div class="mt-4">
+                        <button id="apply-config" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition">
+                            Apply Configuration
+                        </button>
+                        <span id="config-status" class="ml-2 text-sm text-gray-600"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="upload-section" class="card p-8 max-w-4xl mx-auto">
+            <h2 class="text-2xl font-semibold mb-6 text-center">Upload Test Images</h2>
+            <p class="text-center text-gray-600 mb-6">Upload multiple images for comprehensive model comparison</p>
+            
             <form id="upload-form" enctype="multipart/form-data">
-                <div class="border-2 border-dashed border-gray-300 rounded-lg p-10 text-center cursor-pointer hover:border-blue-500 transition">
-                    <input type="file" id="file-input" name="files[]" multiple accept="image/png, image/jpeg, image/jpg" class="hidden">
-                    <label for="file-input" class="cursor-pointer">
-                        <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
+                <div id="batch-upload-area" class="batch-upload-area">
+                    <input type="file" id="file-input" name="files[]" multiple accept="image/png,image/jpeg,image/jpg,.png,.jpg,.jpeg" class="hidden">
+                    <label for="file-input" class="cursor-pointer block">
+                        <svg class="mx-auto h-16 w-16 text-gray-400 mb-4" stroke="currentColor" fill="none" viewBox="0 0 48 48">
                             <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
-                        <p class="mt-2 text-sm text-gray-600">
-                            <span class="font-semibold text-blue-600">Click to upload</span> or drag and drop
+                        <p class="text-xl font-semibold text-gray-700 mb-2">
+                            <span class="text-blue-600">Click to upload</span> or drag and drop
                         </p>
-                        <p class="text-xs text-gray-500">PNG, JPG, JPEG up to 16MB</p>
+                        <p class="text-gray-500 mb-2">PNG, JPG, JPEG images (up to 50MB each)</p>
+                        <p class="text-sm text-gray-400">Upload multiple images for batch processing</p>
                     </label>
                 </div>
-                <div id="file-list" class="mt-4 text-sm text-gray-700"></div>
+                
+                <div id="file-preview-container" class="mt-6 hidden">
+                    <h3 class="text-lg font-semibold mb-3">Selected Files</h3>
+                    <div id="file-preview-list" class="space-y-2 max-h-60 overflow-y-auto"></div>
+                    <div class="mt-4 text-sm text-gray-600">
+                        <span id="file-count">0</span> files selected
+                    </div>
+                </div>
+                
                 <div class="mt-6 text-center">
-                    <button type="submit" class="bg-blue-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400" disabled>
-                        Analyze Performance
+                    <button type="submit" class="bg-blue-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>
+                        <span id="analyze-text">Analyze Performance</span>
+                        <span id="analyze-spinner" class="hidden ml-2">
+                            <svg class="animate-spin h-5 w-5 inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </span>
                     </button>
                 </div>
             </form>
@@ -74,72 +246,386 @@
 
         <div id="loading" class="text-center my-10 hidden">
             <div class="loader inline-block"></div>
-            <p class="mt-4 text-lg font-medium">Analyzing images... This may take a moment.</p>
+            <p class="mt-4 text-lg font-medium">Processing images and generating analytics...</p>
+            <p class="text-sm text-gray-600">This may take a moment for large batches</p>
         </div>
+        
         <div id="error-message" class="hidden my-6 max-w-3xl mx-auto bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg" role="alert">
             <strong class="font-bold">Error:</strong>
             <span class="block sm:inline" id="error-text"></span>
         </div>
 
         <div id="results-section" class="hidden">
-            <div id="summary-section" class="mt-16">
-                 <h2 class="text-3xl font-bold text-center mb-8">Overall Performance Summary</h2>
-                 <div class="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
-                     <div class="card p-6 border-t-4 border-green-500">
-                        <h3 class="text-xl font-bold mb-4">Model 1 (<span class="text-green-600">Green Boxes</span>)</h3>
-                        <div id="summary-model1" class="space-y-2"></div>
-                     </div>
-                     <div class="card p-6 border-t-4 border-blue-500">
-                        <h3 class="text-xl font-bold mb-4">Model 2 (<span class="text-blue-600">Blue Boxes</span>)</h3>
-                        <div id="summary-model2" class="space-y-2"></div>
-                     </div>
-                 </div>
+            <div id="report-section" class="report-section max-w-4xl mx-auto mb-8">
+                <div class="text-center">
+                    <h2 class="text-2xl font-bold text-gray-900 mb-2">📊 Comprehensive Analysis Report</h2>
+                    <p class="text-gray-700 mb-4">Download a detailed PDF report with all performance metrics and visualizations</p>
+                    <button id="download-report" class="bg-yellow-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-yellow-700 transition">
+                        📄 Download PDF Report
+                    </button>
+                </div>
             </div>
 
-            <div id="image-results-container" class="mt-12">
+            <div id="summary-section" class="mt-16">
+                <h2 class="text-3xl font-bold text-center mb-8">Performance Dashboard</h2>
+                <div id="current-config" class="text-center mb-6 p-4 bg-blue-50 rounded-lg max-w-2xl mx-auto">
+                    <p class="text-sm text-gray-600">Comparing classes: <span id="config-display" class="font-semibold text-blue-600"></span></p>
+                </div>
+                
+                <div class="performance-grid max-w-6xl mx-auto mb-8">
+                    <div class="metric-card">
+                        <h3 class="text-lg font-semibold mb-2">🏆 Overall Winner</h3>
+                        <p id="overall-winner" class="text-2xl font-bold text-green-600">-</p>
+                    </div>
+                    <div class="metric-card">
+                        <h3 class="text-lg font-semibold mb-2">📸 Images Processed</h3>
+                        <p id="images-processed" class="text-2xl font-bold text-blue-600">-</p>
+                    </div>
+                    <div class="metric-card">
+                        <h3 class="text-lg font-semibold mb-2">⚡ Avg Speed Difference</h3>
+                        <p id="speed-difference" class="text-2xl font-bold text-purple-600">-</p>
+                    </div>
+                    <div class="metric-card">
+                        <h3 class="text-lg font-semibold mb-2">🎯 Avg Confidence Difference</h3>
+                        <p id="confidence-difference" class="text-2xl font-bold text-orange-600">-</p>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-6xl mx-auto">
+                    <div class="card p-6 border-t-4 border-green-500">
+                        <h3 class="text-xl font-bold mb-4">Model 1 (<span class="text-green-600">Green Boxes</span>)</h3>
+                        <div id="model1-name" class="text-sm text-gray-600 mb-4 font-mono"></div>
+                        <div id="summary-model1" class="space-y-3"></div>
+                    </div>
+                    <div class="card p-6 border-t-4 border-blue-500">
+                        <h3 class="text-xl font-bold mb-4">Model 2 (<span class="text-blue-600">Blue Boxes</span>)</h3>
+                        <div id="model2-name" class="text-sm text-gray-600 mb-4 font-mono"></div>
+                        <div id="summary-model2" class="space-y-3"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="charts-section" class="mt-16 max-w-6xl mx-auto">
+                <h2 class="text-3xl font-bold text-center mb-8">Performance Visualizations</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div class="card p-6">
+                        <h3 class="text-lg font-semibold mb-4">Inference Time Distribution</h3>
+                        <canvas id="inference-time-chart"></canvas>
+                    </div>
+                    <div class="card p-6">
+                        <h3 class="text-lg font-semibold mb-4">Confidence Score Distribution</h3>
+                        <canvas id="confidence-chart"></canvas>
+                    </div>
+                    <div class="card p-6">
+                        <h3 class="text-lg font-semibold mb-4">Detections Per Image</h3>
+                        <canvas id="detection-chart"></canvas>
+                    </div>
+                    <div class="card p-6">
+                        <h3 class="text-lg font-semibold mb-4">Frames Per Second Comparison</h3>
+                        <canvas id="fps-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div id="file-results-container" class="mt-16">
                 <h2 class="text-3xl font-bold text-center mb-8">Per-Image Analysis</h2>
+                <div class="max-w-6xl mx-auto">
+                    <div class="text-center mb-6">
+                        <button id="toggle-view" class="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition">
+                            Switch to Grid View
+                        </button>
+                    </div>
+                    <div id="results-container" class="space-y-8">
+                        </div>
+                </div>
             </div>
         </div>
     </div>
 
     <script>
+        let currentMediaType = 'images';
+        let currentMapping = 'football_detection';
+        let selectedClasses = ['football', 'cone'];
+        let availableMappings = {};
+        let currentResults = null;
+        let isGridView = false;
+        
         const uploadForm = document.getElementById('upload-form');
         const fileInput = document.getElementById('file-input');
-        const fileList = document.getElementById('file-list');
+        const batchUploadArea = document.getElementById('batch-upload-area');
+        const filePreviewContainer = document.getElementById('file-preview-container');
+        const filePreviewList = document.getElementById('file-preview-list');
+        const fileCountSpan = document.getElementById('file-count');
         const submitButton = uploadForm.querySelector('button[type="submit"]');
         const loadingDiv = document.getElementById('loading');
         const resultsSection = document.getElementById('results-section');
-        const imageResultsContainer = document.getElementById('image-results-container');
-        const summaryModel1 = document.getElementById('summary-model1');
-        const summaryModel2 = document.getElementById('summary-model2');
         const errorMessageDiv = document.getElementById('error-message');
         const errorText = document.getElementById('error-text');
+        const applyConfigButton = document.getElementById('apply-config');
+        const configStatus = document.getElementById('config-status');
+        const configDisplay = document.getElementById('config-display');
 
-        fileInput.addEventListener('change', updateFileList);
+        // Initialize the page
+        document.addEventListener('DOMContentLoaded', function() {
+            loadClassMappings();
+            setupFileUpload();
+        });
 
-        function updateFileList() {
-            fileList.innerHTML = '';
-            if (fileInput.files.length > 0) {
-                const fileNames = Array.from(fileInput.files).map(f => f.name).join(', ');
-                fileList.innerHTML = `<p><strong>Selected:</strong> ${fileNames}</p>`;
-                submitButton.disabled = false;
-            } else {
+        // File upload setup
+        function setupFileUpload() {
+            // Drag and drop functionality
+            batchUploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                batchUploadArea.classList.add('dragover');
+            });
+
+            batchUploadArea.addEventListener('dragleave', () => {
+                batchUploadArea.classList.remove('dragover');
+            });
+
+            batchUploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                batchUploadArea.classList.remove('dragover');
+                const files = e.dataTransfer.files;
+                handleFileSelection(files);
+            });
+
+            fileInput.addEventListener('change', (e) => {
+                handleFileSelection(e.target.files);
+            });
+        }
+
+        function handleFileSelection(files) {
+            if (files.length === 0) return;
+
+            filePreviewList.innerHTML = '';
+            fileCountSpan.textContent = files.length;
+            
+            Array.from(files).forEach((file, index) => {
+                const filePreview = document.createElement('div');
+                filePreview.className = 'file-preview';
+                
+                const img = document.createElement('img');
+                img.src = URL.createObjectURL(file);
+                img.onload = () => URL.revokeObjectURL(img.src);
+                
+                const fileInfo = document.createElement('div');
+                fileInfo.className = 'flex-1';
+                fileInfo.innerHTML = `
+                    <p class="font-medium text-gray-900">${file.name}</p>
+                    <p class="text-sm text-gray-500">${formatFileSize(file.size)}</p>
+                `;
+                
+                const removeButton = document.createElement('button');
+                removeButton.className = 'text-red-500 hover:text-red-700 ml-2';
+                removeButton.innerHTML = '×';
+                removeButton.onclick = () => {
+                    filePreview.remove();
+                    updateFileCount();
+                };
+                
+                filePreview.appendChild(img);
+                filePreview.appendChild(fileInfo);
+                filePreview.appendChild(removeButton);
+                filePreviewList.appendChild(filePreview);
+            });
+            
+            filePreviewContainer.classList.remove('hidden');
+            submitButton.disabled = false;
+        }
+
+        function updateFileCount() {
+            const count = filePreviewList.children.length;
+            fileCountSpan.textContent = count;
+            if (count === 0) {
+                filePreviewContainer.classList.add('hidden');
                 submitButton.disabled = true;
             }
         }
 
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Load class mappings
+        async function loadClassMappings() {
+            try {
+                const response = await fetch('/get_class_mappings');
+                const data = await response.json();
+                
+                availableMappings = data.mappings;
+                currentMapping = data.current_mapping;
+                selectedClasses = data.selected_classes;
+                
+                populateMappingOptions();
+                populateClassOptions();
+                updateConfigDisplay();
+                
+            } catch (error) {
+                console.error('Error loading class mappings:', error);
+                showError('Failed to load class mappings');
+            }
+        }
+
+        function populateMappingOptions() {
+            const mappingOptions = document.getElementById('mapping-options');
+            mappingOptions.innerHTML = '';
+            
+            Object.keys(availableMappings).forEach(mappingName => {
+                const mapping = availableMappings[mappingName];
+                const option = document.createElement('div');
+                option.className = `mapping-selector cursor-pointer ${mappingName === currentMapping ? 'active' : ''}`;
+                option.onclick = () => selectMapping(mappingName);
+                
+                const title = mappingName.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+                const classes = mapping.standard_classes.join(', ');
+                
+                option.innerHTML = `
+                    <h4 class="font-semibold text-gray-800">${title}</h4>
+                    <p class="text-sm text-gray-600">Classes: ${classes}</p>
+                `;
+                
+                mappingOptions.appendChild(option);
+            });
+        }
+
+        function selectMapping(mappingName) {
+            currentMapping = mappingName;
+            populateMappingOptions();
+            populateClassOptions();
+            
+            selectedClasses = [...availableMappings[mappingName].standard_classes];
+            populateClassOptions();
+        }
+
+        function populateClassOptions() {
+            const classOptions = document.getElementById('class-options');
+            classOptions.innerHTML = '';
+            
+            const mapping = availableMappings[currentMapping];
+            if (!mapping) return;
+            
+            mapping.standard_classes.forEach(className => {
+                const option = document.createElement('div');
+                option.className = 'flex items-center space-x-2';
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = `class-${className}`;
+                checkbox.className = 'class-checkbox';
+                checkbox.checked = selectedClasses.includes(className);
+                checkbox.onchange = () => toggleClass(className);
+                
+                const label = document.createElement('label');
+                label.htmlFor = `class-${className}`;
+                label.className = 'text-sm font-medium text-gray-700 capitalize cursor-pointer';
+                label.textContent = className;
+                
+                option.appendChild(checkbox);
+                option.appendChild(label);
+                classOptions.appendChild(option);
+            });
+        }
+
+        function toggleClass(className) {
+            const index = selectedClasses.indexOf(className);
+            if (index === -1) {
+                selectedClasses.push(className);
+            } else {
+                selectedClasses.splice(index, 1);
+            }
+        }
+
+        async function applyConfiguration() {
+            if (selectedClasses.length === 0) {
+                showError('Please select at least one class to compare');
+                return;
+            }
+            
+            try {
+                configStatus.textContent = 'Applying...';
+                configStatus.className = 'ml-2 text-sm text-blue-600';
+                
+                const response = await fetch('/set_class_mapping', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        mapping_name: currentMapping,
+                        selected_classes: selectedClasses
+                    })
+                });
+                
+                if (response.ok) {
+                    configStatus.textContent = 'Configuration applied successfully!';
+                    configStatus.className = 'ml-2 text-sm text-green-600';
+                    updateConfigDisplay();
+                    
+                    resultsSection.classList.add('hidden');
+                    
+                    setTimeout(() => {
+                        configStatus.textContent = '';
+                    }, 3000);
+                } else {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Failed to apply configuration');
+                }
+                
+            } catch (error) {
+                console.error('Error applying configuration:', error);
+                configStatus.textContent = 'Error applying configuration';
+                configStatus.className = 'ml-2 text-sm text-red-600';
+                showError(error.message);
+            }
+        }
+
+        function updateConfigDisplay() {
+            const displayText = selectedClasses.join(', ');
+            configDisplay.textContent = displayText;
+        }
+
+        function showError(message) {
+            errorText.textContent = message;
+            errorMessageDiv.classList.remove('hidden');
+            setTimeout(() => {
+                errorMessageDiv.classList.add('hidden');
+            }, 5000);
+        }
+
+        // Form submission
         uploadForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             
+            if (selectedClasses.length === 0) {
+                showError('Please configure and select classes to compare before uploading files');
+                return;
+            }
+            
+            if (fileInput.files.length === 0) {
+                showError('Please select at least one image file');
+                return;
+            }
+            
+            // Show loading state
             loadingDiv.classList.remove('hidden');
             resultsSection.classList.add('hidden');
             errorMessageDiv.classList.add('hidden');
-            imageResultsContainer.innerHTML = '<h2 class="text-3xl font-bold text-center mb-8">Per-Image Analysis</h2>';
+            
+            // Update button state
+            submitButton.disabled = true;
+            document.getElementById('analyze-text').classList.add('hidden');
+            document.getElementById('analyze-spinner').classList.remove('hidden');
             
             const formData = new FormData();
             for (const file of fileInput.files) {
                 formData.append('files[]', file);
             }
+            formData.append('media_type', 'images');
 
             try {
                 const response = await fetch('/upload', {
@@ -148,22 +634,331 @@
                 });
 
                 if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                    let errorMessage = `HTTP error! status: ${response.status}`;
+                    try {
+                        const errorData = await response.json();
+                        errorMessage = errorData.error || errorMessage;
+                    } catch (jsonError) {
+                        const errorText = await response.text();
+                        errorMessage = errorText || errorMessage;
+                    }
+                    throw new Error(errorMessage);
                 }
 
                 const data = await response.json();
+                currentResults = data;
                 displayResults(data);
 
             } catch (error) {
                 console.error('Upload failed:', error);
-                errorText.textContent = error.message;
-                errorMessageDiv.classList.remove('hidden');
+                showError(error.message);
             } finally {
                 loadingDiv.classList.add('hidden');
+                submitButton.disabled = false;
+                document.getElementById('analyze-text').classList.remove('hidden');
+                document.getElementById('analyze-spinner').classList.add('hidden');
             }
         });
-        
+
+        // Apply configuration button
+        applyConfigButton.addEventListener('click', applyConfiguration);
+
+        // Display results
+        function displayResults(data) {
+            resultsSection.classList.remove('hidden');
+            
+            // Update configuration display
+            configDisplay.textContent = data.mapping_config.selected_classes.join(', ');
+            
+            // Set up PDF download
+            const downloadButton = document.getElementById('download-report');
+            downloadButton.onclick = () => {
+                window.open(data.pdf_report.url, '_blank');
+            };
+            
+            // Display quick stats
+            displayQuickStats(data);
+            
+            // Display model summaries
+            displayModelSummaries(data);
+            
+            // Create performance charts
+            createPerformanceCharts(data);
+            
+            // Display per-image results
+            displayPerImageResults(data);
+        }
+
+        function displayQuickStats(data) {
+            const model1Wins = data.overall_stats.model1.image_wins;
+            const model2Wins = data.overall_stats.model2.image_wins;
+            const totalImages = data.results.length;
+            
+            // Overall winner
+            let winner = 'Tie';
+            if (model1Wins > model2Wins) {
+                winner = `Model 1 (${model1Wins}/${totalImages})`;
+            } else if (model2Wins > model1Wins) {
+                winner = `Model 2 (${model2Wins}/${totalImages})`;
+            }
+            document.getElementById('overall-winner').textContent = winner;
+            
+            // Images processed
+            document.getElementById('images-processed').textContent = totalImages;
+            
+            // Speed difference
+            const speedDiff = Math.abs(data.overall_stats.model1.avg_inference_speed - data.overall_stats.model2.avg_inference_speed);
+            document.getElementById('speed-difference').textContent = `${speedDiff.toFixed(1)}ms`;
+            
+            // Confidence difference
+            const confDiff = Math.abs(data.overall_stats.model1.avg_confidence - data.overall_stats.model2.avg_confidence);
+            document.getElementById('confidence-difference').textContent = `${confDiff.toFixed(3)}`;
+        }
+
+        function displayModelSummaries(data) {
+            // Model names
+            document.getElementById('model1-name').textContent = data.model_names.model1;
+            document.getElementById('model2-name').textContent = data.model_names.model2;
+            
+            // Model 1 summary
+            const s1 = data.overall_stats.model1;
+            const summary1Html = `
+                <div class="space-y-2">
+                    <div class="flex justify-between">
+                        <span class="font-medium">Files Won:</span>
+                        <span class="font-mono text-lg font-bold text-green-600">${s1.image_wins}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="font-medium">Model Size:</span>
+                        <span class="font-mono text-sm">${s1.model_size}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="font-medium">Avg Inference:</span>
+                        <span class="font-mono">${s1.avg_inference_speed.toFixed(2)}ms</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="font-medium">Avg FPS:</span>
+                        <span class="font-mono">${s1.fps.toFixed(1)}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="font-medium">Throughput:</span>
+                        <span class="font-mono">${s1.throughput.toFixed(2)} img/s</span>
+                    </div>
+                    
+                    <div class="flex justify-between">
+                        <span class="font-medium">Avg Confidence:</span>
+                        <span class="font-mono">${s1.avg_confidence.toFixed(3)}</span>
+                    </div>
+                </div>
+            `;
+            document.getElementById('summary-model1').innerHTML = summary1Html;
+            
+            // Model 2 summary
+            const s2 = data.overall_stats.model2;
+            const summary2Html = `
+                <div class="space-y-2">
+                    <div class="flex justify-between">
+                        <span class="font-medium">Files Won:</span>
+                        <span class="font-mono text-lg font-bold text-blue-600">${s2.image_wins}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="font-medium">Model Size:</span>
+                        <span class="font-mono text-sm">${s2.model_size}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="font-medium">Avg Inference:</span>
+                        <span class="font-mono">${s2.avg_inference_speed.toFixed(2)}ms</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="font-medium">Avg FPS:</span>
+                        <span class="font-mono">${s2.fps.toFixed(1)}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="font-medium">Throughput:</span>
+                        <span class="font-mono">${s2.throughput.toFixed(2)} img/s</span>
+                    </div>
+                    
+                    <div class="flex justify-between">
+                        <span class="font-medium">Avg Confidence:</span>
+                        <span class="font-mono">${s2.avg_confidence.toFixed(3)}</span>
+                    </div>
+                </div>
+            `;
+            document.getElementById('summary-model2').innerHTML = summary2Html;
+        }
+
+        function createPerformanceCharts(data) {
+            // Extract data for charts
+            const inferenceData1 = data.results.map(r => r.inference_speed1);
+            const inferenceData2 = data.results.map(r => r.inference_speed2);
+            const confidenceData1 = data.results.map(r => r.analysis1.avg_confidence);
+            const confidenceData2 = data.results.map(r => r.analysis2.avg_confidence);
+            const detectionData1 = data.results.map(r => r.analysis1.total_detections);
+            const detectionData2 = data.results.map(r => r.analysis2.total_detections);
+            
+            // Inference time chart
+            createChart('inference-time-chart', 'Inference Time (ms)', 
+                inferenceData1, inferenceData2, data.model_names);
+            
+            // Confidence chart
+            createChart('confidence-chart', 'Confidence Score', 
+                confidenceData1, confidenceData2, data.model_names);
+            
+            // Detection count chart
+            createChart('detection-chart', 'Detection Count', 
+                detectionData1, detectionData2, data.model_names);
+            
+            // FPS chart
+            const fpsData1 = inferenceData1.map(t => t > 0 ? 1000 / t : 0);
+            const fpsData2 = inferenceData2.map(t => t > 0 ? 1000 / t : 0);
+            createChart('fps-chart', 'FPS', fpsData1, fpsData2, data.model_names);
+        }
+
+        function createChart(canvasId, label, data1, data2, modelNames) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            
+            // Clear previous chart instance if it exists
+            if (window.myCharts && window.myCharts[canvasId]) {
+                window.myCharts[canvasId].destroy();
+            }
+            if (!window.myCharts) {
+                window.myCharts = {};
+            }
+
+            window.myCharts[canvasId] = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data1.map((_, i) => `Image ${i + 1}`),
+                    datasets: [{
+                        label: modelNames.model1,
+                        data: data1,
+                        borderColor: 'rgb(34, 197, 94)',
+                        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                        tension: 0.1
+                    }, {
+                        label: modelNames.model2,
+                        data: data2,
+                        borderColor: 'rgb(59, 130, 246)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: label
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        function displayPerImageResults(data) {
+            const container = document.getElementById('results-container');
+            container.innerHTML = '';
+            
+            data.results.forEach((result, index) => {
+                const resultCard = createResultCard(result, index + 1, data.class_names);
+                container.appendChild(resultCard);
+            });
+        }
+
+        function createResultCard(result, index, classNames) {
+            const card = document.createElement('div');
+            card.className = 'card p-6 mb-8';
+            
+            const winnerBannerClass = getWinnerBannerClass(result.comparison);
+            
+            // Generate class-specific analysis
+            const an1 = result.analysis1;
+            const an2 = result.analysis2;
+            
+            let classCountsHtml1 = '', classCountsHtml2 = '';
+            classNames.forEach(name => {
+                const capName = name.charAt(0).toUpperCase() + name.slice(1);
+                const count1 = an1.class_counts[name] || 0;
+                const count2 = an2.class_counts[name] || 0;
+                const avgConf1 = an1.avg_class_confidence[name] || 0;
+                const avgConf2 = an2.avg_class_confidence[name] || 0;
+
+                const countIcon1 = getComparisonIcon(count1, count2, true);
+                const countIcon2 = getComparisonIcon(count2, count1, true);
+
+                classCountsHtml1 += `<li><strong>${capName}s:</strong> <span class="font-mono">${count1}</span>${countIcon1} (Conf: ${avgConf1.toFixed(3)})</li>`;
+                classCountsHtml2 += `<li><strong>${capName}s:</strong> <span class="font-mono">${count2}</span>${countIcon2} (Conf: ${avgConf2.toFixed(3)})</li>`;
+            });
+
+            const totalSpeed1 = result.preprocess_speed1 + result.inference_speed1 + result.postprocess_speed1;
+            const totalSpeed2 = result.preprocess_speed2 + result.inference_speed2 + result.postprocess_speed2;
+
+            const model1StatsHtml = `
+                <ul class="space-y-1 text-sm">
+                    <li><strong>Total Speed:</strong> <span class="font-mono">${totalSpeed1.toFixed(2)} ms</span>${getComparisonIcon(totalSpeed1, totalSpeed2, false)}</li>
+                    <li><strong>Inference:</strong> <span class="font-mono">${result.inference_speed1.toFixed(2)} ms</span>${getComparisonIcon(result.inference_speed1, result.inference_speed2, false)}</li>
+                    
+                    <li><strong>Avg. Confidence:</strong> <span class="font-mono">${an1.avg_confidence.toFixed(3)}</span>${getComparisonIcon(an1.avg_confidence, an2.avg_confidence, true)}</li>
+                    <hr class="my-2">
+                    ${classCountsHtml1}
+                </ul>`;
+            
+            const model2StatsHtml = `
+                <ul class="space-y-1 text-sm">
+                    <li><strong>Total Speed:</strong> <span class="font-mono">${totalSpeed2.toFixed(2)} ms</span>${getComparisonIcon(totalSpeed2, totalSpeed1, false)}</li>
+                    <li><strong>Inference:</strong> <span class="font-mono">${result.inference_speed2.toFixed(2)} ms</span>${getComparisonIcon(result.inference_speed2, result.inference_speed1, false)}</li>
+                    
+                    <li><strong>Avg. Confidence:</strong> <span class="font-mono">${an2.avg_confidence.toFixed(3)}</span>${getComparisonIcon(an2.avg_confidence, an1.avg_confidence, true)}</li>
+                    <hr class="my-2">
+                    ${classCountsHtml2}
+                </ul>`;
+
+            card.innerHTML = `
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-semibold">Image ${index}: ${result.original_filename}</h3>
+                    <span class="text-sm text-gray-500">${index} of ${currentResults.results.length}</span>
+                </div>
+                <div class="text-center mb-4 winner-banner ${winnerBannerClass}">
+                    <strong>Result:</strong> ${result.comparison}
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="space-y-4">
+                        <h4 class="text-lg font-semibold text-center text-green-600">Model 1 Output</h4>
+                        <div class="relative">
+                            <img src="${result.processed_url1}" alt="Model 1 Output" class="rounded-lg shadow-md w-full">
+                            <div class="absolute top-2 left-2 bg-green-500 text-white px-2 py-1 rounded text-sm font-semibold">
+                                Model 1
+                            </div>
+                        </div>
+                        <div class="bg-gray-50 p-4 rounded-lg">
+                            <h5 class="font-semibold mb-2">Performance Metrics</h5>
+                            ${model1StatsHtml}
+                        </div>
+                    </div>
+                    <div class="space-y-4">
+                        <h4 class="text-lg font-semibold text-center text-blue-600">Model 2 Output</h4>
+                        <div class="relative">
+                            <img src="${result.processed_url2}" alt="Model 2 Output" class="rounded-lg shadow-md w-full">
+                            <div class="absolute top-2 left-2 bg-blue-500 text-white px-2 py-1 rounded text-sm font-semibold">
+                                Model 2
+                            </div>
+                        </div>
+                        <div class="bg-gray-50 p-4 rounded-lg">
+                            <h5 class="font-semibold mb-2">Performance Metrics</h5>
+                            ${model2StatsHtml}
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            return card;
+        }
+
         function getWinnerBannerClass(comparison) {
             if (comparison.includes("Model 1")) return 'winner-model1';
             if (comparison.includes("Model 2")) return 'winner-model2';
@@ -171,140 +966,57 @@
             return 'winner-none';
         }
 
-        /**
-         * Compares two values and returns an up/down arrow icon.
-         * @param {number} valueA - The value for the current item.
-         * @param {number} valueB - The value to compare against.
-         * @param {boolean} higherIsBetter - True if a higher value is better, false otherwise.
-         * @returns {string} HTML string for the icon.
-         */
         function getComparisonIcon(valueA, valueB, higherIsBetter = true) {
-            const upIcon = `<span class="text-green-500 font-bold ml-2">▲</span>`;
-            const downIcon = `<span class="text-red-500 font-bold ml-2">▼</span>`;
+            const upIcon = `<span class="text-green-500 font-bold ml-1">▲</span>`;
+            const downIcon = `<span class="text-red-500 font-bold ml-1">▼</span>`;
             
-            // Use a small epsilon for floating point comparisons
             if (Math.abs(valueA - valueB) < 0.0001) return '';
 
             if (higherIsBetter) {
                 return valueA > valueB ? upIcon : downIcon;
-            } else { // Lower is better (e.g., for speed)
+            } else {
                 return valueA < valueB ? upIcon : downIcon;
             }
         }
 
-        function displayResults(data) {
-            resultsSection.classList.remove('hidden');
+        // Toggle view functionality
+        document.getElementById('toggle-view').addEventListener('click', function() {
+            isGridView = !isGridView;
+            const container = document.getElementById('results-container');
+            const button = document.getElementById('toggle-view');
             
-            displayOverallStats(data.overall_stats, data.class_names);
-
-            data.results.forEach(result => {
-                const resultCard = document.createElement('div');
-                resultCard.className = 'card p-6 mb-8 max-w-6xl mx-auto';
+            if (isGridView) {
+                container.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6';
+                button.textContent = 'Switch to List View';
                 
-                const winnerBannerClass = getWinnerBannerClass(result.comparison);
-
-                // --- Generate Per-Image Stats HTML with Comparison Icons ---
-                const an1 = result.analysis1;
-                const an2 = result.analysis2;
-                
-                let classCountsHtml1 = '', classCountsHtml2 = '';
-                data.class_names.forEach(name => {
-                    const capName = name.charAt(0).toUpperCase() + name.slice(1);
-                    const count1 = an1.class_counts[name];
-                    const count2 = an2.class_counts[name];
-                    const avgConf1 = an1.avg_class_confidence[name];
-                    const avgConf2 = an2.avg_class_confidence[name];
-
-                    const countIcon1 = getComparisonIcon(count1, count2, true);
-                    const countIcon2 = getComparisonIcon(count2, count1, true);
-
-                    classCountsHtml1 += `<li><strong>${capName}s:</strong> <span class="font-mono">${count1}</span>${countIcon1} (Avg Conf: ${avgConf1.toFixed(3)})</li>`;
-                    classCountsHtml2 += `<li><strong>${capName}s:</strong> <span class="font-mono">${count2}</span>${countIcon2} (Avg Conf: ${avgConf2.toFixed(3)})</li>`;
+                // Modify cards for grid view
+                const cards = container.querySelectorAll('.card');
+                cards.forEach(card => {
+                    card.className = 'card p-4 h-full';
+                    // Simplify content for grid view
+                    const images = card.querySelectorAll('img');
+                    images.forEach(img => {
+                        img.style.maxHeight = '200px';
+                        img.style.objectFit = 'cover';
+                    });
                 });
-
-                const totalSpeed1 = result.preprocess_speed1 + result.inference_speed1 + result.postprocess_speed1;
-                const totalSpeed2 = result.preprocess_speed2 + result.inference_speed2 + result.postprocess_speed2;
-
-                const model1StatsHtml = `
-                    <ul class="space-y-1">
-                        <li><strong>Total Speed:</strong> <span class="font-mono">${totalSpeed1.toFixed(2)} ms</span>${getComparisonIcon(totalSpeed1, totalSpeed2, false)}</li>
-                        <li><strong>Total Detections:</strong> <span class="font-mono">${an1.total_detections}</span>${getComparisonIcon(an1.total_detections, an2.total_detections, true)}</li>
-                        <li><strong>Avg. Confidence:</strong> <span class="font-mono">${an1.avg_confidence.toFixed(3)}</span>${getComparisonIcon(an1.avg_confidence, an2.avg_confidence, true)}</li>
-                        <hr class="my-1">
-                        ${classCountsHtml1}
-                    </ul>`;
+            } else {
+                container.className = 'space-y-8';
+                button.textContent = 'Switch to Grid View';
                 
-                const model2StatsHtml = `
-                    <ul class="space-y-1">
-                        <li><strong>Total Speed:</strong> <span class="font-mono">${totalSpeed2.toFixed(2)} ms</span>${getComparisonIcon(totalSpeed2, totalSpeed1, false)}</li>
-                        <li><strong>Total Detections:</strong> <span class="font-mono">${an2.total_detections}</span>${getComparisonIcon(an2.total_detections, an1.total_detections, true)}</li>
-                        <li><strong>Avg. Confidence:</strong> <span class="font-mono">${an2.avg_confidence.toFixed(3)}</span>${getComparisonIcon(an2.avg_confidence, an1.avg_confidence, true)}</li>
-                        <hr class="my-1">
-                        ${classCountsHtml2}
-                    </ul>`;
-
-                resultCard.innerHTML = `
-                    <h3 class="text-xl font-semibold mb-2">${result.original_filename}</h3>
-                    <div class="text-center mb-4 winner-banner ${winnerBannerClass}">
-                        <strong>Comparison Result:</strong> ${result.comparison}
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                            <h4 class="text-lg font-semibold text-center mb-2">Model 1 Output</h4>
-                            <img src="${result.processed_url1}" alt="Model 1 Output" class="rounded-lg shadow-md w-full">
-                            <div class="mt-4 text-sm bg-gray-50 p-3 rounded-lg">${model1StatsHtml}</div>
-                        </div>
-                        <div>
-                            <h4 class="text-lg font-semibold text-center mb-2">Model 2 Output</h4>
-                            <img src="${result.processed_url2}" alt="Model 2 Output" class="rounded-lg shadow-md w-full">
-                            <div class="mt-4 text-sm bg-gray-50 p-3 rounded-lg">${model2StatsHtml}</div>
-                        </div>
-                    </div>
-                `;
-                imageResultsContainer.appendChild(resultCard);
-            });
-        }
-        
-        function displayOverallStats(stats, classNames) {
-            const s1 = stats.model1;
-            const s2 = stats.model2;
-
-            let model1ClassCountsHtml = '', model2ClassCountsHtml = '';
-            classNames.forEach(name => {
-                const capName = name.charAt(0).toUpperCase() + name.slice(1);
-                const icon1 = getComparisonIcon(s1.class_counts[name], s2.class_counts[name], true);
-                const icon2 = getComparisonIcon(s2.class_counts[name], s1.class_counts[name], true);
-                model1ClassCountsHtml += `<li><strong>Total ${capName}s:</strong> <span class="font-mono">${s1.class_counts[name]}</span>${icon1}</li>`;
-                model2ClassCountsHtml += `<li><strong>Total ${capName}s:</strong> <span class="font-mono">${s2.class_counts[name]}</span>${icon2}</li>`;
-            });
-
-            const total_speed1 = (s1.avg_preprocess_speed || 0) + (s1.avg_inference_speed || 0) + (s1.avg_postprocess_speed || 0);
-            const total_speed2 = (s2.avg_preprocess_speed || 0) + (s2.avg_inference_speed || 0) + (s2.avg_postprocess_speed || 0);
-
-            summaryModel1.innerHTML = `
-                <ul class="space-y-1 text-gray-700">
-                    <li><strong>Images Won:</strong> <span class="font-mono text-lg font-semibold">${s1.image_wins}</span>${getComparisonIcon(s1.image_wins, s2.image_wins, true)}</li>
-                    <li><strong>Model Size:</strong> <span class="font-mono">${s1.model_size}</span></li>
-                    <li class="pt-1"><strong>Avg. Total Speed:</strong> <span class="font-mono">${total_speed1.toFixed(2)} ms</span>${getComparisonIcon(total_speed1, total_speed2, false)}</li>
-                    <li class="text-xs pl-4">Inference: <span class="font-mono">${(s1.avg_inference_speed || 0).toFixed(2)} ms</span>${getComparisonIcon(s1.avg_inference_speed, s2.avg_inference_speed, false)}</li>
-                    <hr class="my-2">
-                    <li><strong>Total Detections:</strong> <span class="font-mono">${s1.total_detections}</span>${getComparisonIcon(s1.total_detections, s2.total_detections, true)}</li>
-                    <li><strong>Overall Avg. Confidence:</strong> <span class="font-mono">${(s1.avg_confidence || 0).toFixed(3)}</span>${getComparisonIcon(s1.avg_confidence, s2.avg_confidence, true)}</li>
-                    ${model1ClassCountsHtml}
-                </ul>`;
-
-            summaryModel2.innerHTML = `
-                <ul class="space-y-1 text-gray-700">
-                    <li><strong>Images Won:</strong> <span class="font-mono text-lg font-semibold">${s2.image_wins}</span>${getComparisonIcon(s2.image_wins, s1.image_wins, true)}</li>
-                    <li><strong>Model Size:</strong> <span class="font-mono">${s2.model_size}</span></li>
-                    <li class="pt-1"><strong>Avg. Total Speed:</strong> <span class="font-mono">${total_speed2.toFixed(2)} ms</span>${getComparisonIcon(total_speed2, total_speed1, false)}</li>
-                    <li class="text-xs pl-4">Inference: <span class="font-mono">${(s2.avg_inference_speed || 0).toFixed(2)} ms</span>${getComparisonIcon(s2.avg_inference_speed, s1.avg_inference_speed, false)}</li>
-                    <hr class="my-2">
-                    <li><strong>Total Detections:</strong> <span class="font-mono">${s2.total_detections}</span>${getComparisonIcon(s2.total_detections, s1.total_detections, true)}</li>
-                    <li><strong>Overall Avg. Confidence:</strong> <span class="font-mono">${(s2.avg_confidence || 0).toFixed(3)}</span>${getComparisonIcon(s2.avg_confidence, s1.avg_confidence, true)}</li>
-                    ${model2ClassCountsHtml}
-                </ul>`;
-        }
+                // Restore cards for list view
+                const cards = container.querySelectorAll('.card');
+                cards.forEach(card => {
+                    card.className = 'card p-6 mb-8';
+                    // Restore full content
+                    const images = card.querySelectorAll('img');
+                    images.forEach(img => {
+                        img.style.maxHeight = 'none';
+                        img.style.objectFit = 'contain';
+                    });
+                });
+            }
+        });
     </script>
 </body>
 </html>
