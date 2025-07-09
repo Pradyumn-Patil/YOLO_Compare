@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YOLO Model Comparison</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .card {
+            background-color: white;
+            border-radius: 0.75rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s ease-in-out;
+        }
+        .loader {
+            border: 8px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 8px solid #3498db;
+            width: 60px;
+            height: 60px;
+            animation: spin 2s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .winner-banner {
+            font-size: 1.1rem;
+            font-weight: 600;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+        }
+        .winner-model1 { background-color: #dcfce7; color: #166534; } /* Green */
+        .winner-model2 { background-color: #dbeafe; color: #1e40af; } /* Blue */
+        .winner-tie { background-color: #f3f4f6; color: #4b5563; }
+        .winner-none { background-color: #fee2e2; color: #991b1b; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <div class="container mx-auto px-4 py-8">
+        <header class="text-center mb-12">
+            <h1 class="text-4xl font-bold text-gray-900">YOLOv8 Model Performance Analyzer</h1>
+            <p class="mt-2 text-lg text-gray-600">Compare two models for football and cone detection.</p>
+        </header>
+
+        <div id="upload-section" class="card p-8 max-w-3xl mx-auto">
+            <h2 class="text-2xl font-semibold mb-4 text-center">Upload Test Images</h2>
+            <form id="upload-form" enctype="multipart/form-data">
+                <div class="border-2 border-dashed border-gray-300 rounded-lg p-10 text-center cursor-pointer hover:border-blue-500 transition">
+                    <input type="file" id="file-input" name="files[]" multiple accept="image/png, image/jpeg, image/jpg" class="hidden">
+                    <label for="file-input" class="cursor-pointer">
+                        <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
+                            <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <p class="mt-2 text-sm text-gray-600">
+                            <span class="font-semibold text-blue-600">Click to upload</span> or drag and drop
+                        </p>
+                        <p class="text-xs text-gray-500">PNG, JPG, JPEG up to 16MB</p>
+                    </label>
+                </div>
+                <div id="file-list" class="mt-4 text-sm text-gray-700"></div>
+                <div class="mt-6 text-center">
+                    <button type="submit" class="bg-blue-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400" disabled>
+                        Analyze Performance
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <div id="loading" class="text-center my-10 hidden">
+            <div class="loader inline-block"></div>
+            <p class="mt-4 text-lg font-medium">Analyzing images... This may take a moment.</p>
+        </div>
+        <div id="error-message" class="hidden my-6 max-w-3xl mx-auto bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg" role="alert">
+            <strong class="font-bold">Error:</strong>
+            <span class="block sm:inline" id="error-text"></span>
+        </div>
+
+        <div id="results-section" class="hidden">
+            <div id="summary-section" class="mt-16">
+                 <h2 class="text-3xl font-bold text-center mb-8">Overall Performance Summary</h2>
+                 <div class="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+                     <div class="card p-6 border-t-4 border-green-500">
+                        <h3 class="text-xl font-bold mb-4">Model 1 (<span class="text-green-600">Green Boxes</span>)</h3>
+                        <div id="summary-model1" class="space-y-2"></div>
+                     </div>
+                     <div class="card p-6 border-t-4 border-blue-500">
+                        <h3 class="text-xl font-bold mb-4">Model 2 (<span class="text-blue-600">Blue Boxes</span>)</h3>
+                        <div id="summary-model2" class="space-y-2"></div>
+                     </div>
+                 </div>
+            </div>
+
+            <div id="image-results-container" class="mt-12">
+                <h2 class="text-3xl font-bold text-center mb-8">Per-Image Analysis</h2>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const uploadForm = document.getElementById('upload-form');
+        const fileInput = document.getElementById('file-input');
+        const fileList = document.getElementById('file-list');
+        const submitButton = uploadForm.querySelector('button[type="submit"]');
+        const loadingDiv = document.getElementById('loading');
+        const resultsSection = document.getElementById('results-section');
+        const imageResultsContainer = document.getElementById('image-results-container');
+        const summaryModel1 = document.getElementById('summary-model1');
+        const summaryModel2 = document.getElementById('summary-model2');
+        const errorMessageDiv = document.getElementById('error-message');
+        const errorText = document.getElementById('error-text');
+
+        fileInput.addEventListener('change', updateFileList);
+
+        function updateFileList() {
+            fileList.innerHTML = '';
+            if (fileInput.files.length > 0) {
+                const fileNames = Array.from(fileInput.files).map(f => f.name).join(', ');
+                fileList.innerHTML = `<p><strong>Selected:</strong> ${fileNames}</p>`;
+                submitButton.disabled = false;
+            } else {
+                submitButton.disabled = true;
+            }
+        }
+
+        uploadForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            loadingDiv.classList.remove('hidden');
+            resultsSection.classList.add('hidden');
+            errorMessageDiv.classList.add('hidden');
+            imageResultsContainer.innerHTML = '<h2 class="text-3xl font-bold text-center mb-8">Per-Image Analysis</h2>';
+            
+            const formData = new FormData();
+            for (const file of fileInput.files) {
+                formData.append('files[]', file);
+            }
+
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                displayResults(data);
+
+            } catch (error) {
+                console.error('Upload failed:', error);
+                errorText.textContent = error.message;
+                errorMessageDiv.classList.remove('hidden');
+            } finally {
+                loadingDiv.classList.add('hidden');
+            }
+        });
+        
+        function getWinnerBannerClass(comparison) {
+            if (comparison.includes("Model 1")) return 'winner-model1';
+            if (comparison.includes("Model 2")) return 'winner-model2';
+            if (comparison.includes("similarly")) return 'winner-tie';
+            return 'winner-none';
+        }
+
+        /**
+         * Compares two values and returns an up/down arrow icon.
+         * @param {number} valueA - The value for the current item.
+         * @param {number} valueB - The value to compare against.
+         * @param {boolean} higherIsBetter - True if a higher value is better, false otherwise.
+         * @returns {string} HTML string for the icon.
+         */
+        function getComparisonIcon(valueA, valueB, higherIsBetter = true) {
+            const upIcon = `<span class="text-green-500 font-bold ml-2">▲</span>`;
+            const downIcon = `<span class="text-red-500 font-bold ml-2">▼</span>`;
+            
+            // Use a small epsilon for floating point comparisons
+            if (Math.abs(valueA - valueB) < 0.0001) return '';
+
+            if (higherIsBetter) {
+                return valueA > valueB ? upIcon : downIcon;
+            } else { // Lower is better (e.g., for speed)
+                return valueA < valueB ? upIcon : downIcon;
+            }
+        }
+
+        function displayResults(data) {
+            resultsSection.classList.remove('hidden');
+            
+            displayOverallStats(data.overall_stats, data.class_names);
+
+            data.results.forEach(result => {
+                const resultCard = document.createElement('div');
+                resultCard.className = 'card p-6 mb-8 max-w-6xl mx-auto';
+                
+                const winnerBannerClass = getWinnerBannerClass(result.comparison);
+
+                // --- Generate Per-Image Stats HTML with Comparison Icons ---
+                const an1 = result.analysis1;
+                const an2 = result.analysis2;
+                
+                let classCountsHtml1 = '', classCountsHtml2 = '';
+                data.class_names.forEach(name => {
+                    const capName = name.charAt(0).toUpperCase() + name.slice(1);
+                    const count1 = an1.class_counts[name];
+                    const count2 = an2.class_counts[name];
+                    const avgConf1 = an1.avg_class_confidence[name];
+                    const avgConf2 = an2.avg_class_confidence[name];
+
+                    const countIcon1 = getComparisonIcon(count1, count2, true);
+                    const countIcon2 = getComparisonIcon(count2, count1, true);
+
+                    classCountsHtml1 += `<li><strong>${capName}s:</strong> <span class="font-mono">${count1}</span>${countIcon1} (Avg Conf: ${avgConf1.toFixed(3)})</li>`;
+                    classCountsHtml2 += `<li><strong>${capName}s:</strong> <span class="font-mono">${count2}</span>${countIcon2} (Avg Conf: ${avgConf2.toFixed(3)})</li>`;
+                });
+
+                const totalSpeed1 = result.preprocess_speed1 + result.inference_speed1 + result.postprocess_speed1;
+                const totalSpeed2 = result.preprocess_speed2 + result.inference_speed2 + result.postprocess_speed2;
+
+                const model1StatsHtml = `
+                    <ul class="space-y-1">
+                        <li><strong>Total Speed:</strong> <span class="font-mono">${totalSpeed1.toFixed(2)} ms</span>${getComparisonIcon(totalSpeed1, totalSpeed2, false)}</li>
+                        <li><strong>Total Detections:</strong> <span class="font-mono">${an1.total_detections}</span>${getComparisonIcon(an1.total_detections, an2.total_detections, true)}</li>
+                        <li><strong>Avg. Confidence:</strong> <span class="font-mono">${an1.avg_confidence.toFixed(3)}</span>${getComparisonIcon(an1.avg_confidence, an2.avg_confidence, true)}</li>
+                        <hr class="my-1">
+                        ${classCountsHtml1}
+                    </ul>`;
+                
+                const model2StatsHtml = `
+                    <ul class="space-y-1">
+                        <li><strong>Total Speed:</strong> <span class="font-mono">${totalSpeed2.toFixed(2)} ms</span>${getComparisonIcon(totalSpeed2, totalSpeed1, false)}</li>
+                        <li><strong>Total Detections:</strong> <span class="font-mono">${an2.total_detections}</span>${getComparisonIcon(an2.total_detections, an1.total_detections, true)}</li>
+                        <li><strong>Avg. Confidence:</strong> <span class="font-mono">${an2.avg_confidence.toFixed(3)}</span>${getComparisonIcon(an2.avg_confidence, an1.avg_confidence, true)}</li>
+                        <hr class="my-1">
+                        ${classCountsHtml2}
+                    </ul>`;
+
+                resultCard.innerHTML = `
+                    <h3 class="text-xl font-semibold mb-2">${result.original_filename}</h3>
+                    <div class="text-center mb-4 winner-banner ${winnerBannerClass}">
+                        <strong>Comparison Result:</strong> ${result.comparison}
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <h4 class="text-lg font-semibold text-center mb-2">Model 1 Output</h4>
+                            <img src="${result.processed_url1}" alt="Model 1 Output" class="rounded-lg shadow-md w-full">
+                            <div class="mt-4 text-sm bg-gray-50 p-3 rounded-lg">${model1StatsHtml}</div>
+                        </div>
+                        <div>
+                            <h4 class="text-lg font-semibold text-center mb-2">Model 2 Output</h4>
+                            <img src="${result.processed_url2}" alt="Model 2 Output" class="rounded-lg shadow-md w-full">
+                            <div class="mt-4 text-sm bg-gray-50 p-3 rounded-lg">${model2StatsHtml}</div>
+                        </div>
+                    </div>
+                `;
+                imageResultsContainer.appendChild(resultCard);
+            });
+        }
+        
+        function displayOverallStats(stats, classNames) {
+            const s1 = stats.model1;
+            const s2 = stats.model2;
+
+            let model1ClassCountsHtml = '', model2ClassCountsHtml = '';
+            classNames.forEach(name => {
+                const capName = name.charAt(0).toUpperCase() + name.slice(1);
+                const icon1 = getComparisonIcon(s1.class_counts[name], s2.class_counts[name], true);
+                const icon2 = getComparisonIcon(s2.class_counts[name], s1.class_counts[name], true);
+                model1ClassCountsHtml += `<li><strong>Total ${capName}s:</strong> <span class="font-mono">${s1.class_counts[name]}</span>${icon1}</li>`;
+                model2ClassCountsHtml += `<li><strong>Total ${capName}s:</strong> <span class="font-mono">${s2.class_counts[name]}</span>${icon2}</li>`;
+            });
+
+            const total_speed1 = (s1.avg_preprocess_speed || 0) + (s1.avg_inference_speed || 0) + (s1.avg_postprocess_speed || 0);
+            const total_speed2 = (s2.avg_preprocess_speed || 0) + (s2.avg_inference_speed || 0) + (s2.avg_postprocess_speed || 0);
+
+            summaryModel1.innerHTML = `
+                <ul class="space-y-1 text-gray-700">
+                    <li><strong>Images Won:</strong> <span class="font-mono text-lg font-semibold">${s1.image_wins}</span>${getComparisonIcon(s1.image_wins, s2.image_wins, true)}</li>
+                    <li><strong>Model Size:</strong> <span class="font-mono">${s1.model_size}</span></li>
+                    <li class="pt-1"><strong>Avg. Total Speed:</strong> <span class="font-mono">${total_speed1.toFixed(2)} ms</span>${getComparisonIcon(total_speed1, total_speed2, false)}</li>
+                    <li class="text-xs pl-4">Inference: <span class="font-mono">${(s1.avg_inference_speed || 0).toFixed(2)} ms</span>${getComparisonIcon(s1.avg_inference_speed, s2.avg_inference_speed, false)}</li>
+                    <hr class="my-2">
+                    <li><strong>Total Detections:</strong> <span class="font-mono">${s1.total_detections}</span>${getComparisonIcon(s1.total_detections, s2.total_detections, true)}</li>
+                    <li><strong>Overall Avg. Confidence:</strong> <span class="font-mono">${(s1.avg_confidence || 0).toFixed(3)}</span>${getComparisonIcon(s1.avg_confidence, s2.avg_confidence, true)}</li>
+                    ${model1ClassCountsHtml}
+                </ul>`;
+
+            summaryModel2.innerHTML = `
+                <ul class="space-y-1 text-gray-700">
+                    <li><strong>Images Won:</strong> <span class="font-mono text-lg font-semibold">${s2.image_wins}</span>${getComparisonIcon(s2.image_wins, s1.image_wins, true)}</li>
+                    <li><strong>Model Size:</strong> <span class="font-mono">${s2.model_size}</span></li>
+                    <li class="pt-1"><strong>Avg. Total Speed:</strong> <span class="font-mono">${total_speed2.toFixed(2)} ms</span>${getComparisonIcon(total_speed2, total_speed1, false)}</li>
+                    <li class="text-xs pl-4">Inference: <span class="font-mono">${(s2.avg_inference_speed || 0).toFixed(2)} ms</span>${getComparisonIcon(s2.avg_inference_speed, s1.avg_inference_speed, false)}</li>
+                    <hr class="my-2">
+                    <li><strong>Total Detections:</strong> <span class="font-mono">${s2.total_detections}</span>${getComparisonIcon(s2.total_detections, s1.total_detections, true)}</li>
+                    <li><strong>Overall Avg. Confidence:</strong> <span class="font-mono">${(s2.avg_confidence || 0).toFixed(3)}</span>${getComparisonIcon(s2.avg_confidence, s1.avg_confidence, true)}</li>
+                    ${model2ClassCountsHtml}
+                </ul>`;
+        }
+    </script>
+</body>
+</html>
