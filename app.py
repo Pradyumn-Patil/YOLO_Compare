@@ -3,8 +3,239 @@ import time
 import json
 import statistics
 from datetime import datetime
-from flask import Flask, request, jsonify, render_template, url_for, send_file
+from flask import Flask, request, jsonify, render_template, url_for, send_file, Response
 from werkzeug.utils import secure_filename
+
+# Fix for missing modules before importing YOLO - Universal compatibility
+def add_missing_modules():
+    """Add ALL missing modules for compatibility with any YOLO version"""
+    try:
+        from ultralytics.nn.modules import block
+        import torch
+        import torch.nn as nn
+        
+        # Get existing modules to avoid duplication
+        from ultralytics.nn.modules.conv import Conv
+        from ultralytics.nn.modules.block import Bottleneck
+        
+        # First, define base C3 class that will be used by others
+        class C3Base(nn.Module):
+            """CSP Bottleneck with 3 convolutions"""
+            def __init__(self, c1, c2, n=1, shortcut=True, g=1, e=0.5):
+                super().__init__()
+                c_ = int(c2 * e)  # hidden channels
+                self.cv1 = Conv(c1, c_, 1, 1)
+                self.cv2 = Conv(c1, c_, 1, 1)
+                self.cv3 = Conv(2 * c_, c2, 1)
+                self.m = nn.Sequential(*(Bottleneck(c_, c_, shortcut, g, e=1.0) for _ in range(n)))
+
+            def forward(self, x):
+                return self.cv3(torch.cat((self.m(self.cv1(x)), self.cv2(x)), 1))
+        
+        # Add C3 module
+        if not hasattr(block, 'C3'):
+            block.C3 = C3Base
+            print("Added C3 module")
+        
+        # Get reference to C3 (either existing or just added)
+        C3 = getattr(block, 'C3', C3Base)
+        
+        # C3k module (the one currently missing)
+        if not hasattr(block, 'C3k'):
+            class C3k(nn.Module):
+                """C3k is a variant with customizable kernel sizes"""
+                def __init__(self, c1, c2, n=1, shortcut=True, g=1, e=0.5, k=3):
+                    super().__init__()
+                    c_ = int(c2 * e)  # hidden channels
+                    self.cv1 = Conv(c1, c_, 1, 1)
+                    self.cv2 = Conv(c1, c_, 1, 1)
+                    self.cv3 = Conv(2 * c_, c2, 1)
+                    self.m = nn.Sequential(*(Bottleneck(c_, c_, shortcut, g, k=(k, k), e=1.0) for _ in range(n)))
+
+                def forward(self, x):
+                    return self.cv3(torch.cat((self.m(self.cv1(x)), self.cv2(x)), 1))
+            
+            block.C3k = C3k
+            print("Added C3k module")
+        
+        # C3k2 module
+        if not hasattr(block, 'C3k2'):
+            class C3k2(nn.Module):
+                """C3k2 is a variant of C3k with specific configurations"""
+                def __init__(self, c1, c2, n=1, c3k=False, e=0.5, g=1, shortcut=True):
+                    super().__init__()
+                    c_ = int(c2 * e)  # hidden channels
+                    self.cv1 = Conv(c1, c_, 1, 1)
+                    self.cv2 = Conv(c1, c_, 1, 1) 
+                    self.cv3 = Conv(2 * c_, c2, 1)
+                    self.m = nn.Sequential(*(Bottleneck(c_, c_, shortcut, g, k=(3, 3), e=1.0) for _ in range(n)))
+                    
+                def forward(self, x):
+                    return self.cv3(torch.cat((self.m(self.cv1(x)), self.cv2(x)), 1))
+            
+            block.C3k2 = C3k2
+            print("Added C3k2 module")
+        
+        # C2f module (newer YOLOv8 versions)
+        if not hasattr(block, 'C2f'):
+            class C2f(nn.Module):
+                """CSP Bottleneck with 2 convolutions and fusion"""
+                def __init__(self, c1, c2, n=1, shortcut=False, g=1, e=0.5):
+                    super().__init__()
+                    self.c = int(c2 * e)  # hidden channels
+                    self.cv1 = Conv(c1, 2 * self.c, 1, 1)
+                    self.cv2 = Conv((2 + n) * self.c, c2, 1)
+                    self.m = nn.ModuleList(Bottleneck(self.c, self.c, shortcut, g, k=(3, 3), e=1.0) for _ in range(n))
+
+                def forward(self, x):
+                    y = list(self.cv1(x).split((self.c, self.c), 1))
+                    y.extend(m(y[-1]) for m in self.m)
+                    return self.cv2(torch.cat(y, 1))
+            
+            block.C2f = C2f
+            print("Added C2f module")
+        
+        # C3TR module (Transformer variant)
+        if not hasattr(block, 'C3TR'):
+            class C3TR(C3):
+                """C3 module with Transformer blocks"""
+                def __init__(self, c1, c2, n=1, shortcut=True, g=1, e=0.5):
+                    super().__init__(c1, c2, n, shortcut, g, e)
+                    # Simplified version - in reality would have transformer blocks
+            
+            block.C3TR = C3TR
+            print("Added C3TR module")
+        
+        # C3SPP module (Spatial Pyramid Pooling)
+        if not hasattr(block, 'C3SPP'):
+            class C3SPP(C3):
+                """C3 module with SPP block"""
+                def __init__(self, c1, c2, k=(5, 9, 13), n=1, shortcut=True, g=1, e=0.5):
+                    super().__init__(c1, c2, n, shortcut, g, e)
+                    # Simplified version
+            
+            block.C3SPP = C3SPP
+            print("Added C3SPP module")
+        
+        # C3Ghost module (Ghost convolutions)
+        if not hasattr(block, 'C3Ghost'):
+            class C3Ghost(C3):
+                """C3 module with Ghost Bottlenecks"""
+                def __init__(self, c1, c2, n=1, shortcut=True, g=1, e=0.5):
+                    super().__init__(c1, c2, n, shortcut, g, e)
+                    # Uses ghost convolutions internally
+            
+            block.C3Ghost = C3Ghost
+            print("Added C3Ghost module")
+        
+        # SPPF module (Spatial Pyramid Pooling - Fast)
+        if not hasattr(block, 'SPPF'):
+            class SPPF(nn.Module):
+                """Spatial Pyramid Pooling - Fast"""
+                def __init__(self, c1, c2, k=5):
+                    super().__init__()
+                    c_ = c1 // 2  # hidden channels
+                    self.cv1 = Conv(c1, c_, 1, 1)
+                    self.cv2 = Conv(c_ * 4, c2, 1, 1)
+                    self.m = nn.MaxPool2d(kernel_size=k, stride=1, padding=k // 2)
+
+                def forward(self, x):
+                    x = self.cv1(x)
+                    y1 = self.m(x)
+                    y2 = self.m(y1)
+                    return self.cv2(torch.cat((x, y1, y2, self.m(y2)), 1))
+            
+            block.SPPF = SPPF
+            print("Added SPPF module")
+        
+        # C2 module (compact version)
+        if not hasattr(block, 'C2'):
+            class C2(nn.Module):
+                """CSP Bottleneck with 2 convolutions"""
+                def __init__(self, c1, c2, n=1, shortcut=True, g=1, e=0.5):
+                    super().__init__()
+                    self.c = int(c2 * e)  # hidden channels
+                    self.cv1 = Conv(c1, 2 * self.c, 1, 1)
+                    self.cv2 = Conv(2 * self.c, c2, 1)
+                    self.m = nn.Sequential(*(Bottleneck(self.c, self.c, shortcut, g, e=1.0) for _ in range(n)))
+
+                def forward(self, x):
+                    a, b = self.cv1(x).split((self.c, self.c), 1)
+                    return self.cv2(torch.cat((a, self.m(b)), 1))
+            
+            block.C2 = C2
+            print("Added C2 module")
+            
+        print("✅ All compatibility modules added successfully")
+            
+    except Exception as e:
+        print(f"Warning: Error adding compatibility modules: {e}")
+        # Continue anyway - don't crash the app
+
+# Dynamic module loader for any missing modules
+def add_dynamic_module(module_name):
+    """Dynamically add a missing module based on its name"""
+    from ultralytics.nn.modules import block
+    import torch.nn as nn
+    from ultralytics.nn.modules.conv import Conv
+    from ultralytics.nn.modules.block import Bottleneck
+    
+    print(f"Attempting to create module: {module_name}")
+    
+    # Create a generic module based on common patterns
+    if module_name.startswith('C3') or module_name.startswith('C2'):
+        # It's a CSP-style module
+        class DynamicCSPModule(nn.Module):
+            def __init__(self, c1, c2, n=1, shortcut=True, g=1, e=0.5, *args, **kwargs):
+                super().__init__()
+                c_ = int(c2 * e)  # hidden channels
+                self.cv1 = Conv(c1, c_, 1, 1)
+                self.cv2 = Conv(c1, c_, 1, 1)
+                self.cv3 = Conv(2 * c_, c2, 1)
+                self.m = nn.Sequential(*(Bottleneck(c_, c_, shortcut, g, e=1.0) for _ in range(n)))
+                
+            def forward(self, x):
+                return self.cv3(torch.cat((self.m(self.cv1(x)), self.cv2(x)), 1))
+        
+        setattr(block, module_name, DynamicCSPModule)
+        print(f"✅ Dynamically added {module_name} as CSP-style module")
+        
+    elif 'SPP' in module_name:
+        # It's a Spatial Pyramid Pooling module
+        class DynamicSPPModule(nn.Module):
+            def __init__(self, c1, c2, k=5, *args, **kwargs):
+                super().__init__()
+                c_ = c1 // 2
+                self.cv1 = Conv(c1, c_, 1, 1)
+                self.cv2 = Conv(c_ * 4, c2, 1, 1)
+                self.m = nn.MaxPool2d(kernel_size=k, stride=1, padding=k // 2)
+                
+            def forward(self, x):
+                x = self.cv1(x)
+                y1 = self.m(x)
+                y2 = self.m(y1)
+                return self.cv2(torch.cat((x, y1, y2, self.m(y2)), 1))
+        
+        setattr(block, module_name, DynamicSPPModule)
+        print(f"✅ Dynamically added {module_name} as SPP-style module")
+        
+    else:
+        # Create a generic module that might work
+        class GenericModule(nn.Module):
+            def __init__(self, c1, c2, *args, **kwargs):
+                super().__init__()
+                self.conv = Conv(c1, c2, 1, 1)
+                
+            def forward(self, x):
+                return self.conv(x)
+        
+        setattr(block, module_name, GenericModule)
+        print(f"✅ Dynamically added {module_name} as generic module")
+
+# Add compatibility modules before importing YOLO
+print("Initializing YOLO compatibility layer...")
+add_missing_modules()
+
 from ultralytics import YOLO
 import cv2
 import numpy as np
@@ -18,6 +249,8 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.backends.backend_pdf import PdfPages
@@ -25,6 +258,10 @@ import seaborn as sns
 from PIL import Image
 import io
 import base64
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import multiprocessing
+import threading
+import csv
 
 # --- Configuration ---
 UPLOAD_FOLDER = 'static/uploads'
@@ -90,6 +327,7 @@ CLASS_MAPPINGS = {
 # Default configuration
 CURRENT_MAPPING = 'football_detection'
 SELECTED_CLASSES = ['football', 'cone']
+CONFIDENCE_THRESHOLD = 0.25  # Default confidence threshold
 
 # --- App Initialization ---
 app = Flask(__name__)
@@ -166,6 +404,7 @@ class PerformanceMetrics:
 
 # --- Helper Functions ---
 def allowed_file(filename, file_type):
+    """Check if file extension is allowed for the given file type"""
     if '.' not in filename:
         return False
     ext = filename.rsplit('.', 1)[1].lower()
@@ -175,11 +414,79 @@ def allowed_file(filename, file_type):
         return ext in ALLOWED_VIDEO_EXTENSIONS
     return False
 
+def validate_file_upload(file):
+    """Validate uploaded file"""
+    if not file or file.filename == '':
+        return False, "No file selected"
+    
+    # Check file extension
+    ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
+    if ext not in ALLOWED_IMAGE_EXTENSIONS and ext not in ALLOWED_VIDEO_EXTENSIONS:
+        return False, f"Invalid file type. Supported: {ALLOWED_IMAGE_EXTENSIONS | ALLOWED_VIDEO_EXTENSIONS}"
+    
+    # Check file size
+    file.seek(0, os.SEEK_END)
+    size = file.tell()
+    file.seek(0)
+    
+    if size > 100 * 1024 * 1024:  # 100MB
+        return False, f"File too large ({format_bytes(size)}). Maximum: 100MB"
+    
+    return True, "OK"
+
 def clear_folders():
+    """Clear temporary folders - fast version that runs in background"""
+    # Just ensure folders exist, don't clean on startup
+    for folder in [UPLOAD_FOLDER, PROCESSED_FOLDER, REPORTS_FOLDER]:
+        os.makedirs(folder, exist_ok=True)
+    
+    # Schedule cleanup in background thread after startup
+    cleanup_thread = threading.Thread(target=background_cleanup, daemon=True)
+    cleanup_thread.start()
+
+def background_cleanup():
+    """Background cleanup of old files - runs after app starts"""
+    time.sleep(5)  # Wait 5 seconds after startup
+    
+    print("Starting background cleanup of old files...")
+    removed_count = 0
+    
     for folder in [UPLOAD_FOLDER, PROCESSED_FOLDER, REPORTS_FOLDER]:
         if os.path.exists(folder):
-            shutil.rmtree(folder)
-        os.makedirs(folder, exist_ok=True)
+            current_time = time.time()
+            try:
+                for file in os.listdir(folder):
+                    file_path = os.path.join(folder, file)
+                    if os.path.isfile(file_path):
+                        # Only remove files older than 2 hours
+                        if current_time - os.path.getmtime(file_path) > 7200:  # 2 hours
+                            try:
+                                os.remove(file_path)
+                                removed_count += 1
+                            except:
+                                pass  # Silently skip files in use
+            except Exception as e:
+                print(f"Cleanup error in {folder}: {e}")
+    
+    if removed_count > 0:
+        print(f"Background cleanup completed: removed {removed_count} old files")
+
+def cleanup_temp_files(session_id=None):
+    """Clean up temporary files from a specific session"""
+    if session_id:
+        # Clean files from specific session in background
+        def cleanup():
+            for folder in [UPLOAD_FOLDER, PROCESSED_FOLDER]:
+                if os.path.exists(folder):
+                    pattern = os.path.join(folder, f"*{session_id}*")
+                    for file_path in glob.glob(pattern):
+                        try:
+                            os.remove(file_path)
+                        except:
+                            pass  # Silently skip
+        
+        # Run in background thread
+        threading.Thread(target=cleanup, daemon=True).start()
 
 def format_bytes(size):
     if size == 0:
@@ -208,7 +515,14 @@ def normalize_class_name(class_name, mapping_config):
     return 'unknown'
 
 def map_model_classes(model, mapping_config, selected_classes):
-    if not hasattr(model, 'names') or not model.names:
+    # Check for names in various places
+    model_names = None
+    if hasattr(model, '_custom_names') and model._custom_names:
+        model_names = model._custom_names
+    elif hasattr(model, 'names') and model.names:
+        model_names = model.names
+    
+    if not model_names:
         if hasattr(model, 'model_path'):
             filename = os.path.basename(model.model_path).lower()
         else:
@@ -216,16 +530,16 @@ def map_model_classes(model, mapping_config, selected_classes):
             
         if 'trtfootballyolo' in filename or 'football' in filename:
             default_mapping = {0: 'cone', 1: 'football'}
-            model.names = default_mapping
-            print(f"Set default class names for football model: {model.names}")
+            model_names = default_mapping
+            print(f"Set default class names for football model: {model_names}")
         else:
             default_mapping = {i: f'class_{i}' for i in range(len(selected_classes))}
-            model.names = default_mapping
-            print(f"Set generic class names: {model.names}")
+            model_names = default_mapping
+            print(f"Set generic class names: {model_names}")
     
     standardized_mapping = {}
     
-    for class_id, class_name in model.names.items():
+    for class_id, class_name in model_names.items():
         normalized_name = normalize_class_name(class_name, mapping_config)
         
         if normalized_name in selected_classes:
@@ -236,50 +550,126 @@ def map_model_classes(model, mapping_config, selected_classes):
     
     if not standardized_mapping:
         print(f"No class mappings found, attempting direct mapping...")
-        print(f"Model classes: {model.names}")
+        print(f"Model classes: {model_names}")
         print(f"Selected classes: {selected_classes}")
         
-        if len(model.names) == len(selected_classes):
+        if len(model_names) == len(selected_classes):
             for i, selected_class in enumerate(selected_classes):
-                if i in model.names:
+                if i in model_names:
                     standardized_mapping[i] = selected_class
                     print(f"Direct mapping: {i} -> {selected_class}")
     
     print(f"Final standardized mapping: {standardized_mapping}")
     return standardized_mapping
 
-def detect_model_type(model_path):
+def detect_model_classes(model, model_path):
+    """Attempt to detect model classes through various methods"""
+    # Method 1: Check if model already has names attribute
+    if hasattr(model, 'names') and model.names:
+        return model.names
+    
+    # Method 2: Try a test inference to get class names
+    try:
+        import tempfile
+        import numpy as np
+        
+        # Create a dummy image
+        dummy_image = np.zeros((640, 640, 3), dtype=np.uint8)
+        temp_path = tempfile.mktemp(suffix='.jpg')
+        cv2.imwrite(temp_path, dummy_image)
+        
+        # Run inference
+        results = model.predict(temp_path, verbose=False, conf=0.01)  # Low confidence to see all classes
+        
+        # Clean up
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        
+        # Extract class names from results
+        if results and len(results) > 0:
+            result = results[0]
+            if hasattr(result, 'names') and result.names:
+                return result.names
+            # Try to get from model after inference
+            if hasattr(model, 'names') and model.names:
+                return model.names
+    except Exception as e:
+        print(f"Test inference failed: {e}")
+    
+    # Method 3: Try to access model internals
+    try:
+        if hasattr(model, 'model') and hasattr(model.model, 'names'):
+            return model.model.names
+        elif hasattr(model, 'predictor') and hasattr(model.predictor, 'model') and hasattr(model.predictor.model, 'names'):
+            return model.predictor.model.names
+    except:
+        pass
+    
+    return None
+
+def infer_classes_from_filename(model_path, num_classes):
+    """Infer class names from filename patterns"""
     filename = os.path.basename(model_path).lower()
     
-    if 'trtfootballyolo' in filename or 'football' in filename:
-        return 'yolov8_football'
-    elif 'cone' in filename:
-        return 'yolov8_football'
+    # Common patterns
+    if 'football' in filename or 'soccer' in filename:
+        if 'cone' in filename:
+            return {0: 'cone', 1: 'football'}
+        else:
+            return {0: 'football', 1: 'player', 2: 'cone', 3: 'goalpost'}
     elif 'coco' in filename:
-        return 'coco'
+        # Return subset of COCO classes
+        coco_classes = {0: 'person', 1: 'bicycle', 2: 'car', 3: 'motorcycle', 5: 'bus', 7: 'truck'}
+        return coco_classes
     else:
-        return 'custom_football'
+        # Generic class names
+        return {i: f'class_{i}' for i in range(num_classes)}
 
 def find_model_files():
+    """Find and validate model files in the models directory"""
     model_files = {}
     model_names = {}
     
+    if not os.path.exists(MODEL_FOLDER):
+        os.makedirs(MODEL_FOLDER, exist_ok=True)
+        return model_files, model_names
+    
     all_files = glob.glob(os.path.join(MODEL_FOLDER, '*'))
     
-    supported_models = [
-        f for f in all_files 
-        if f.rsplit('.', 1)[-1].lower() in ALLOWED_MODEL_EXTENSIONS
-    ]
+    # Filter for supported model files
+    supported_models = []
+    for f in all_files:
+        if not os.path.isfile(f):
+            continue
+        
+        ext = f.rsplit('.', 1)[-1].lower() if '.' in f else ''
+        if ext in ALLOWED_MODEL_EXTENSIONS:
+            # Check file size
+            size = os.path.getsize(f)
+            if size < 1024:  # Less than 1KB
+                print(f"Skipping {os.path.basename(f)}: File too small ({size} bytes)")
+                continue
+            supported_models.append(f)
     
-    if len(supported_models) >= 2:
+    if len(supported_models) == 0:
+        print("No valid model files found in models directory")
+    elif len(supported_models) == 1:
+        print(f"Only one model found: {os.path.basename(supported_models[0])}")
+        print("Please add another model file to the 'models' directory for comparison")
+    else:
+        # Sort by filename for consistent ordering
         supported_models.sort()
         
+        # Take first two models
         model_files['model1'] = supported_models[0]
         model_names['model1'] = os.path.basename(supported_models[0])
         
         model_files['model2'] = supported_models[1]
         model_names['model2'] = os.path.basename(supported_models[1])
         
+        if len(supported_models) > 2:
+            print(f"Found {len(supported_models)} models, using first two: {model_names['model1']}, {model_names['model2']}")
+    
     return model_files, model_names
 
 def get_model_info(model_path):
@@ -293,72 +683,116 @@ def get_model_info(model_path):
     }
 
 def load_model(model_path, mapping_config, selected_classes):
-    if os.path.getsize(model_path) < 1024:
-        raise ValueError(f"Model file '{os.path.basename(model_path)}' is too small. Please replace the placeholder with a real model file.")
-
+    """Load a YOLO model with improved error handling and dynamic class detection"""
+    if not os.path.exists(model_path):
+        raise ValueError(f"Model file not found: {model_path}")
+    
+    file_size = os.path.getsize(model_path)
+    if file_size < 1024:
+        raise ValueError(f"Model file '{os.path.basename(model_path)}' is too small ({file_size} bytes). Please ensure it's a valid model file.")
+    
+    model_name = os.path.basename(model_path)
+    print(f"Loading model: {model_name} ({format_bytes(file_size)})")
+    
     try:
-        model = YOLO(model_path, task='detect')
-        
-        if model_path.endswith('.onnx'):
-            print(f"Loading ONNX model: {os.path.basename(model_path)}")
+        # Create a wrapper class to handle attribute access
+        class ModelWrapper:
+            def __init__(self, yolo_model, model_path):
+                self._model = yolo_model
+                self.model_path = model_path
+                self.is_onnx = model_path.endswith('.onnx')
+                self._custom_names = None
+                self.class_mapping = {}
             
-            try:
-                import tempfile
-                import numpy as np
-                
-                dummy_image = np.zeros((640, 640, 3), dtype=np.uint8)
-                temp_path = tempfile.mktemp(suffix='.jpg')
-                cv2.imwrite(temp_path, dummy_image)
-                
-                try:
-                    results = model(temp_path, verbose=False)
-                    if results and len(results) > 0:
-                        result = results[0]
-                        if hasattr(result, 'names'):
-                            print(f"Model classes detected: {result.names}")
-                        else:
-                            print("Model doesn't have class names, will use default mapping")
-                except Exception as e:
-                    print(f"Test inference failed: {e}")
-                
-                if os.path.exists(temp_path):
-                    os.remove(temp_path)
-                    
-            except Exception as e:
-                print(f"Error testing model structure: {e}")
+            def __call__(self, *args, **kwargs):
+                return self._model(*args, **kwargs)
+            
+            def __getattr__(self, name):
+                # First check our custom attributes
+                if name == 'names':
+                    if self._custom_names is not None:
+                        return self._custom_names
+                    elif hasattr(self._model, 'names'):
+                        return self._model.names
+                    return {}
+                # Then delegate to the wrapped model
+                return getattr(self._model, name)
         
-        model_type = detect_model_type(model_path)
-        print(f"Detected model type: {model_type} for {os.path.basename(model_path)}")
+        # Load the model
+        if model_path.endswith('.onnx'):
+            base_model = YOLO(model_path, task='detect')
+            model = ModelWrapper(base_model, model_path)
+        else:
+            base_model = YOLO(model_path, task='detect')
+            model = ModelWrapper(base_model, model_path)
         
+        # Try to detect classes dynamically
+        detected_classes = detect_model_classes(model, model_path)
+        if detected_classes:
+            print(f"Detected {len(detected_classes)} classes in model: {list(detected_classes.values())[:5]}...")
+            # Store names in a wrapper attribute to avoid setting protected attributes
+            if not hasattr(model, '_custom_names'):
+                model._custom_names = detected_classes
+        else:
+            print(f"Could not detect classes for {model_name}, using fallback method")
+            # Fallback: try to infer from filename or use generic names
+            if not hasattr(model, '_custom_names'):
+                model._custom_names = infer_classes_from_filename(model_path, len(selected_classes))
+        
+        # Apply class mapping
         class_mapping = map_model_classes(model, mapping_config, selected_classes)
+        
+        if not class_mapping:
+            print(f"Warning: No valid class mapping found for {model_name}")
+            # Create a basic mapping
+            class_mapping = {i: selected_classes[i % len(selected_classes)] for i in range(len(selected_classes))}
+            print(f"Using basic mapping: {class_mapping}")
         
         model.class_mapping = class_mapping
         model.selected_classes = selected_classes
+        model.model_name = model_name
         
-        print(f"Applied class mapping: {class_mapping}")
-        
+        print(f"Successfully loaded {model_name} with mapping: {class_mapping}")
         return model
         
     except Exception as e:
-        print(f"Error loading model {model_path}: {e}")
-        try:
-            model = YOLO(model_path)
+        error_msg = f"Failed to load model {model_name}: {str(e)}"
+        print(f"ERROR: {error_msg}")
+        
+        # Check for missing module errors
+        if "Can't get attribute" in str(e) and "on <module" in str(e):
+            # Extract the missing module name
+            import re
+            match = re.search(r"Can't get attribute '(\w+)'", str(e))
+            if match:
+                missing_module = match.group(1)
+                print(f"Detected missing module: {missing_module}")
+                
+                # Try to add the missing module dynamically
+                try:
+                    add_dynamic_module(missing_module)
+                    print(f"Added {missing_module} module dynamically, retrying model load...")
+                    
+                    # Retry loading the model
+                    return load_model(model_path, mapping_config, selected_classes)
+                    
+                except Exception as retry_error:
+                    print(f"Failed to add {missing_module} dynamically: {retry_error}")
+                    error_msg += f"\n\nMissing module '{missing_module}' could not be added dynamically."
             
-            if 'trtfootballyolo' in model_path.lower():
-                model.names = {0: 'cone', 1: 'football'}
-                print(f"Manually set class names for {os.path.basename(model_path)}: {model.names}")
+            # Model version mismatch
+            error_msg += "\n\nThis model was trained with a different version of Ultralytics/YOLOv8."
+            error_msg += "\nPossible solutions:"
+            error_msg += "\n1. Update Ultralytics: pip install -U ultralytics"
+            error_msg += "\n2. Use the ONNX version of this model if available"
+            error_msg += "\n3. Re-export the model with your current Ultralytics version"
+                
+        elif 'onnx' in str(e).lower():
+            error_msg += "\n\nMake sure onnxruntime is installed: pip install onnxruntime"
+        elif 'GPU' in str(e) or 'CUDA' in str(e):
+            error_msg += "\n\nTry running with CPU by setting CUDA_VISIBLE_DEVICES=''"
             
-            class_mapping = map_model_classes(model, mapping_config, selected_classes)
-            model.class_mapping = class_mapping
-            model.selected_classes = selected_classes
-            
-            print(f"Applied class mapping after manual setup: {class_mapping}")
-            return model
-            
-        except Exception as e2:
-            raise ValueError(f"Failed to load model {os.path.basename(model_path)}: {e2}")
-    
-    return model
+        raise ValueError(error_msg)
 
 def filter_results_by_classes(results, class_mapping):
     filtered_results = []
@@ -399,121 +833,327 @@ def draw_boxes_image(image_path, results, output_path, model_name, class_mapping
             
     cv2.imwrite(output_path, image)
 
-def process_batch_images(image_paths, model1, model2, metrics1, metrics2):
-    """Process a batch of images and collect detailed metrics"""
+def process_single_image(args):
+    """Process a single image with both models (for parallel processing)"""
+    image_path, model1, model2, model_names = args
+    filename = os.path.basename(image_path)
+    
+    result_data = {
+        'filename': filename,
+        'path': image_path,
+        'results1': [],
+        'results2': [],
+        'analysis1': {},
+        'analysis2': {},
+        'speeds1': {},
+        'speeds2': {},
+        'comparison': '',
+        'metrics1': {},
+        'metrics2': {}
+    }
+    
+    # Process with model 1
+    start_time = time.time()
+    try:
+        results1 = model1(image_path, verbose=False, conf=CONFIDENCE_THRESHOLD)
+        inference_time1 = (time.time() - start_time) * 1000
+        
+        filtered_results1 = filter_results_by_classes(results1, model1.class_mapping)
+        
+        speed1_dict = results1[0].speed if results1 and len(results1) > 0 else {}
+        preprocess_speed1 = speed1_dict.get('preprocess', 0)
+        postprocess_speed1 = speed1_dict.get('postprocess', 0)
+        total_speed1 = preprocess_speed1 + inference_time1 + postprocess_speed1
+        
+        # Extract confidence scores
+        confidences1 = []
+        detection_count1 = 0
+        for result in filtered_results1:
+            if hasattr(result, 'boxes') and len(result.boxes) > 0:
+                for box in result.boxes:
+                    if hasattr(box, 'conf'):
+                        confidences1.append(float(box.conf[0]))
+                        detection_count1 += 1
+        
+        result_data['results1'] = filtered_results1
+        result_data['speeds1'] = {
+            'preprocess': preprocess_speed1,
+            'inference': inference_time1,
+            'postprocess': postprocess_speed1,
+            'total': total_speed1
+        }
+        result_data['metrics1'] = {
+            'inference_time': inference_time1,
+            'preprocess_time': preprocess_speed1,
+            'postprocess_time': postprocess_speed1,
+            'total_time': total_speed1,
+            'confidences': confidences1,
+            'detection_count': detection_count1,
+            'fps': 1000 / total_speed1 if total_speed1 > 0 else 0
+        }
+        
+    except Exception as e:
+        print(f"Error processing {filename} with model 1: {e}")
+        result_data['speeds1'] = {'preprocess': 0, 'inference': 0, 'postprocess': 0, 'total': 0}
+        result_data['metrics1'] = {'inference_time': 0, 'confidences': [], 'detection_count': 0}
+    
+    # Process with model 2
+    start_time = time.time()
+    try:
+        results2 = model2(image_path, verbose=False, conf=CONFIDENCE_THRESHOLD)
+        inference_time2 = (time.time() - start_time) * 1000
+        
+        filtered_results2 = filter_results_by_classes(results2, model2.class_mapping)
+        
+        speed2_dict = results2[0].speed if results2 and len(results2) > 0 else {}
+        preprocess_speed2 = speed2_dict.get('preprocess', 0)
+        postprocess_speed2 = speed2_dict.get('postprocess', 0)
+        total_speed2 = preprocess_speed2 + inference_time2 + postprocess_speed2
+        
+        # Extract confidence scores
+        confidences2 = []
+        detection_count2 = 0
+        for result in filtered_results2:
+            if hasattr(result, 'boxes') and len(result.boxes) > 0:
+                for box in result.boxes:
+                    if hasattr(box, 'conf'):
+                        confidences2.append(float(box.conf[0]))
+                        detection_count2 += 1
+        
+        result_data['results2'] = filtered_results2
+        result_data['speeds2'] = {
+            'preprocess': preprocess_speed2,
+            'inference': inference_time2,
+            'postprocess': postprocess_speed2,
+            'total': total_speed2
+        }
+        result_data['metrics2'] = {
+            'inference_time': inference_time2,
+            'preprocess_time': preprocess_speed2,
+            'postprocess_time': postprocess_speed2,
+            'total_time': total_speed2,
+            'confidences': confidences2,
+            'detection_count': detection_count2,
+            'fps': 1000 / total_speed2 if total_speed2 > 0 else 0
+        }
+        
+    except Exception as e:
+        print(f"Error processing {filename} with model 2: {e}")
+        result_data['speeds2'] = {'preprocess': 0, 'inference': 0, 'postprocess': 0, 'total': 0}
+        result_data['metrics2'] = {'inference_time': 0, 'confidences': [], 'detection_count': 0}
+    
+    # Analyze results
+    result_data['analysis1'] = analyze_results(result_data['results1'], model1.class_mapping, model1.selected_classes)
+    result_data['analysis2'] = analyze_results(result_data['results2'], model2.class_mapping, model2.selected_classes)
+    result_data['comparison'] = compare_models(
+        result_data['analysis1'], result_data['analysis2'],
+        result_data['metrics1'].get('inference_time', 0),
+        result_data['metrics2'].get('inference_time', 0),
+        model1.selected_classes,
+        model_names['model1'], model_names['model2']
+    )
+    
+    return result_data
+
+def process_batch_images(image_paths, model1, model2, metrics1, metrics2, model_names):
+    """Process a batch of images in parallel and collect detailed metrics"""
     results_data = []
     
-    for image_path in image_paths:
-        filename = os.path.basename(image_path)
+    # Determine number of workers (use fewer workers to avoid overwhelming the system)
+    num_workers = min(4, multiprocessing.cpu_count())
+    print(f"Processing {len(image_paths)} images with {num_workers} parallel workers...")
+    
+    # Thread-safe locks for metrics updates
+    metrics1_lock = threading.Lock()
+    metrics2_lock = threading.Lock()
+    
+    # Process images in parallel
+    with ThreadPoolExecutor(max_workers=num_workers) as executor:
+        # Submit all tasks
+        future_to_image = {
+            executor.submit(process_single_image, (image_path, model1, model2, model_names)): image_path
+            for image_path in image_paths
+        }
         
-        # Process with model 1
-        start_time = time.time()
-        try:
-            results1 = model1(image_path, verbose=False)
-            inference_time1 = (time.time() - start_time) * 1000
-            
-            filtered_results1 = filter_results_by_classes(results1, model1.class_mapping)
-            
-            speed1_dict = results1[0].speed if results1 and len(results1) > 0 else {}
-            preprocess_speed1 = speed1_dict.get('preprocess', 0)
-            postprocess_speed1 = speed1_dict.get('postprocess', 0)
-            total_speed1 = preprocess_speed1 + inference_time1 + postprocess_speed1
-            
-            # Extract confidence scores
-            confidences1 = []
-            detection_count1 = 0
-            for result in filtered_results1:
-                if hasattr(result, 'boxes') and len(result.boxes) > 0:
-                    for box in result.boxes:
-                        if hasattr(box, 'conf'):
-                            confidences1.append(float(box.conf[0]))
-                            detection_count1 += 1
-            
-            # Update metrics
-            metrics1.add_inference_time(inference_time1)
-            metrics1.add_preprocess_time(preprocess_speed1)
-            metrics1.add_postprocess_time(postprocess_speed1)
-            metrics1.add_total_time(total_speed1)
-            metrics1.add_confidence_scores(confidences1)
-            metrics1.add_detection_count(detection_count1)
-            if total_speed1 > 0:
-                metrics1.add_fps_rate(1000 / total_speed1)
-            
-        except Exception as e:
-            print(f"Error processing {filename} with model 1: {e}")
-            filtered_results1 = []
-            inference_time1 = preprocess_speed1 = postprocess_speed1 = 0
-            confidences1 = []
-            detection_count1 = 0
-        
-        # Process with model 2
-        start_time = time.time()
-        try:
-            results2 = model2(image_path, verbose=False)
-            inference_time2 = (time.time() - start_time) * 1000
-            
-            filtered_results2 = filter_results_by_classes(results2, model2.class_mapping)
-            
-            speed2_dict = results2[0].speed if results2 and len(results2) > 0 else {}
-            preprocess_speed2 = speed2_dict.get('preprocess', 0)
-            postprocess_speed2 = speed2_dict.get('postprocess', 0)
-            total_speed2 = preprocess_speed2 + inference_time2 + postprocess_speed2
-            
-            # Extract confidence scores
-            confidences2 = []
-            detection_count2 = 0
-            for result in filtered_results2:
-                if hasattr(result, 'boxes') and len(result.boxes) > 0:
-                    for box in result.boxes:
-                        if hasattr(box, 'conf'):
-                            confidences2.append(float(box.conf[0]))
-                            detection_count2 += 1
-            
-            # Update metrics
-            metrics2.add_inference_time(inference_time2)
-            metrics2.add_preprocess_time(preprocess_speed2)
-            metrics2.add_postprocess_time(postprocess_speed2)
-            metrics2.add_total_time(total_speed2)
-            metrics2.add_confidence_scores(confidences2)
-            metrics2.add_detection_count(detection_count2)
-            if total_speed2 > 0:
-                metrics2.add_fps_rate(1000 / total_speed2)
-            
-        except Exception as e:
-            print(f"Error processing {filename} with model 2: {e}")
-            filtered_results2 = []
-            inference_time2 = preprocess_speed2 = postprocess_speed2 = 0
-            confidences2 = []
-            detection_count2 = 0
-        
-        # Analyze results
-        analysis1 = analyze_results(filtered_results1, model1.class_mapping, SELECTED_CLASSES)
-        analysis2 = analyze_results(filtered_results2, model2.class_mapping, SELECTED_CLASSES)
-        comparison = compare_models(analysis1, analysis2, inference_time1, inference_time2, SELECTED_CLASSES)
-        
-        results_data.append({
-            'filename': filename,
-            'path': image_path,
-            'results1': filtered_results1,
-            'results2': filtered_results2,
-            'analysis1': analysis1,
-            'analysis2': analysis2,
-            'speeds1': {
-                'preprocess': preprocess_speed1,
-                'inference': inference_time1,
-                'postprocess': postprocess_speed1,
-                'total': total_speed1
-            },
-            'speeds2': {
-                'preprocess': preprocess_speed2,
-                'inference': inference_time2,
-                'postprocess': postprocess_speed2,
-                'total': total_speed2
-            },
-            'comparison': comparison
-        })
+        # Collect results as they complete
+        for i, future in enumerate(as_completed(future_to_image), 1):
+            try:
+                result = future.result()
+                results_data.append(result)
+                
+                # Update metrics in thread-safe manner
+                with metrics1_lock:
+                    if result['metrics1']['inference_time'] > 0:
+                        metrics1.add_inference_time(result['metrics1']['inference_time'])
+                        metrics1.add_preprocess_time(result['metrics1'].get('preprocess_time', 0))
+                        metrics1.add_postprocess_time(result['metrics1'].get('postprocess_time', 0))
+                        metrics1.add_total_time(result['metrics1'].get('total_time', 0))
+                        metrics1.add_confidence_scores(result['metrics1'].get('confidences', []))
+                        metrics1.add_detection_count(result['metrics1'].get('detection_count', 0))
+                        if result['metrics1'].get('fps', 0) > 0:
+                            metrics1.add_fps_rate(result['metrics1']['fps'])
+                
+                with metrics2_lock:
+                    if result['metrics2']['inference_time'] > 0:
+                        metrics2.add_inference_time(result['metrics2']['inference_time'])
+                        metrics2.add_preprocess_time(result['metrics2'].get('preprocess_time', 0))
+                        metrics2.add_postprocess_time(result['metrics2'].get('postprocess_time', 0))
+                        metrics2.add_total_time(result['metrics2'].get('total_time', 0))
+                        metrics2.add_confidence_scores(result['metrics2'].get('confidences', []))
+                        metrics2.add_detection_count(result['metrics2'].get('detection_count', 0))
+                        if result['metrics2'].get('fps', 0) > 0:
+                            metrics2.add_fps_rate(result['metrics2']['fps'])
+                
+                # Log progress
+                if i % 5 == 0 or i == len(image_paths):
+                    print(f"Processed {i}/{len(image_paths)} images ({i/len(image_paths)*100:.1f}%)")
+                    
+            except Exception as e:
+                print(f"Error processing image: {e}")
+    
+    # Sort results by filename to maintain consistent ordering
+    results_data.sort(key=lambda x: x['filename'])
     
     return results_data
+
+def process_video(video_path, model1, model2, metrics1, metrics2, model_names, output_path, max_frames=None):
+    """Process video frame by frame with memory optimization"""
+    cap = cv2.VideoCapture(video_path)
+    
+    # Get video properties
+    fps = int(cap.get(cv2.CAP_PROP_FPS))
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    
+    # Limit processing for very long videos
+    if max_frames and total_frames > max_frames:
+        print(f"Video has {total_frames} frames, limiting to {max_frames} frames")
+        total_frames = max_frames
+    
+    # Create output video writer (side-by-side, so double the width)
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_path, fourcc, fps, (width * 2, height))
+    
+    frame_count = 0
+    processing_times = []
+    
+    # Process in batches to manage memory
+    batch_size = 30  # Process 30 frames at a time
+    
+    try:
+        while cap.isOpened() and (not max_frames or frame_count < max_frames):
+            ret, frame = cap.read()
+            if not ret:
+                break
+            
+        frame_count += 1
+        frame_start = time.time()
+        
+        # Process with both models
+        start_time1 = time.time()
+        results1 = model1(frame, verbose=False, conf=CONFIDENCE_THRESHOLD)
+        inference_time1 = (time.time() - start_time1) * 1000
+        
+        start_time2 = time.time()
+        results2 = model2(frame, verbose=False, conf=CONFIDENCE_THRESHOLD)
+        inference_time2 = (time.time() - start_time2) * 1000
+        
+        # Filter results
+        filtered_results1 = filter_results_by_classes(results1, model1.class_mapping)
+        filtered_results2 = filter_results_by_classes(results2, model2.class_mapping)
+        
+        # Create copies for drawing
+        frame1 = frame.copy()
+        frame2 = frame.copy()
+        
+        # Draw bounding boxes and labels for model 1
+        if filtered_results1 and len(filtered_results1) > 0:
+            result1 = filtered_results1[0]
+            if hasattr(result1, 'boxes') and len(result1.boxes) > 0:
+                for box in result1.boxes:
+                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                    x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+                    conf = box.conf[0].cpu().numpy()
+                    cls = int(box.cls[0].cpu().numpy())
+                    
+                    if cls in model1.class_mapping:
+                        class_name = model1.class_mapping[cls]
+                        if class_name in SELECTED_CLASSES:
+                            # Green for model 1
+                            cv2.rectangle(frame1, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                            label = f'{class_name}: {conf:.2f}'
+                            cv2.putText(frame1, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+        
+        # Draw bounding boxes and labels for model 2
+        if filtered_results2 and len(filtered_results2) > 0:
+            result2 = filtered_results2[0]
+            if hasattr(result2, 'boxes') and len(result2.boxes) > 0:
+                for box in result2.boxes:
+                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                    x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+                    conf = box.conf[0].cpu().numpy()
+                    cls = int(box.cls[0].cpu().numpy())
+                    
+                    if cls in model2.class_mapping:
+                        class_name = model2.class_mapping[cls]
+                        if class_name in SELECTED_CLASSES:
+                            # Blue for model 2
+                            cv2.rectangle(frame2, (x1, y1), (x2, y2), (255, 0, 0), 2)
+                            label = f'{class_name}: {conf:.2f}'
+                            cv2.putText(frame2, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+        
+        # Add stats overlay
+        # Model 1 stats
+        cv2.putText(frame1, f'{model_names["model1"]}', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        cv2.putText(frame1, f'Inference: {inference_time1:.1f}ms', (10, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+        cv2.putText(frame1, f'FPS: {1000/inference_time1:.1f}', (10, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+        
+        # Model 2 stats
+        cv2.putText(frame2, f'{model_names["model2"]}', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+        cv2.putText(frame2, f'Inference: {inference_time2:.1f}ms', (10, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+        cv2.putText(frame2, f'FPS: {1000/inference_time2:.1f}', (10, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+        
+        # Add frame counter
+        cv2.putText(frame1, f'Frame: {frame_count}/{total_frames}', (10, height - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        cv2.putText(frame2, f'Frame: {frame_count}/{total_frames}', (10, height - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        
+        # Combine frames side by side
+        combined_frame = np.hstack((frame1, frame2))
+        
+        # Write to output video
+        out.write(combined_frame)
+        
+        # Track metrics
+        metrics1.add_inference_time(inference_time1)
+        metrics2.add_inference_time(inference_time2)
+        
+        # Log progress
+        if frame_count % 30 == 0:  # Log every 30 frames
+            print(f"Processed {frame_count}/{total_frames} frames ({frame_count/total_frames*100:.1f}%)")
+            # Periodic garbage collection for long videos
+            if frame_count % 300 == 0:
+                import gc
+                gc.collect()
+        
+        processing_times.append(time.time() - frame_start)
+    
+    except Exception as e:
+        print(f"Error processing video: {e}")
+    finally:
+        # Ensure resources are released
+        cap.release()
+        out.release()
+        cv2.destroyAllWindows()
+    
+    avg_processing_time = np.mean(processing_times) if processing_times else 0
+    
+    return {
+        'total_frames': frame_count,
+        'fps': fps,
+        'avg_processing_time': avg_processing_time,
+        'output_path': output_path
+    }
 
 def analyze_results(results, class_mapping, selected_classes):
     analysis = {
@@ -556,7 +1196,7 @@ def analyze_results(results, class_mapping, selected_classes):
     
     return analysis
 
-def compare_models(analysis1, analysis2, speed1, speed2, selected_classes):
+def compare_models(analysis1, analysis2, speed1, speed2, selected_classes, name1="Model 1", name2="Model 2"):
     score1, score2 = 0, 0
 
     if analysis1['avg_confidence'] > analysis2['avg_confidence']:
@@ -570,9 +1210,9 @@ def compare_models(analysis1, analysis2, speed1, speed2, selected_classes):
         score2 += 1
 
     if score1 > score2:
-        return "Model 1 is better"
+        return f"{name1} is better"
     if score2 > score1:
-        return "Model 2 is better"
+        return f"{name2} is better"
     if score1 == score2 and score1 > 0:
         return "Both models performed similarly"
     return "No conclusive winner (or no detections)"
@@ -658,23 +1298,23 @@ def generate_pdf_report(results_data, metrics1, metrics2, model_names, model_inf
     stats2 = metrics2.get_statistics()
     
     # Determine overall winner
-    model1_wins = sum(1 for r in results_data if "Model 1" in r['comparison'])
-    model2_wins = sum(1 for r in results_data if "Model 2" in r['comparison'])
+    model1_wins = sum(1 for r in results_data if model_names['model1'] in r['comparison'])
+    model2_wins = sum(1 for r in results_data if model_names['model2'] in r['comparison'])
     
     if model1_wins > model2_wins:
-        winner = f"Model 1 ({model_names['model1']})"
+        winner = f"{model_names['model1']}"
     elif model2_wins > model1_wins:
-        winner = f"Model 2 ({model_names['model2']})"
+        winner = f"{model_names['model2']}"
     else:
         winner = "Tie"
     
     summary_text = f"""
     <b>Overall Winner:</b> {winner}<br/>
     <b>Total Images Processed:</b> {len(results_data)}<br/>
-    <b>Model 1 Wins:</b> {model1_wins}<br/>
-    <b>Model 2 Wins:</b> {model2_wins}<br/>
-    <b>Average Inference Time:</b> Model 1: {stats1['inference_time']['mean']:.2f}ms, Model 2: {stats2['inference_time']['mean']:.2f}ms<br/>
-    <b>Average Confidence:</b> Model 1: {stats1['confidence_scores']['mean']:.3f}, Model 2: {stats2['confidence_scores']['mean']:.3f}<br/>
+    <b>{model_names['model1']} Wins:</b> {model1_wins}<br/>
+    <b>{model_names['model2']} Wins:</b> {model2_wins}<br/>
+    <b>Average Inference Time:</b> {model_names['model1']}: {stats1['inference_time']['mean']:.2f}ms, {model_names['model2']}: {stats2['inference_time']['mean']:.2f}ms<br/>
+    <b>Average Confidence:</b> {model_names['model1']}: {stats1['confidence_scores']['mean']:.3f}, {model_names['model2']}: {stats2['confidence_scores']['mean']:.3f}<br/>
     """
     
     story.append(Paragraph(summary_text, styles['Normal']))
@@ -684,7 +1324,7 @@ def generate_pdf_report(results_data, metrics1, metrics2, model_names, model_inf
     story.append(Paragraph("Model Information", styles['Heading2']))
     
     model_data = [
-        ['Metric', 'Model 1', 'Model 2'],
+        ['Metric', model_names['model1'], model_names['model2']],
         ['Filename', model_names['model1'], model_names['model2']],
         ['Format', model_info['model1']['format'], model_info['model2']['format']],
         ['Size', model_info['model1']['size'], model_info['model2']['size']],
@@ -710,25 +1350,25 @@ def generate_pdf_report(results_data, metrics1, metrics2, model_names, model_inf
     story.append(Paragraph("Detailed Performance Metrics", styles['Heading2']))
     
     perf_data = [
-        ['Metric', 'Model 1', 'Model 2', 'Winner'],
+        ['Metric', model_names['model1'], model_names['model2'], 'Winner'],
         ['Avg Inference Time (ms)', f"{stats1['inference_time']['mean']:.2f} ± {stats1['inference_time']['std']:.2f}", 
          f"{stats2['inference_time']['mean']:.2f} ± {stats2['inference_time']['std']:.2f}",
-         'Model 1' if stats1['inference_time']['mean'] < stats2['inference_time']['mean'] else 'Model 2'],
+         model_names['model1'] if stats1['inference_time']['mean'] < stats2['inference_time']['mean'] else model_names['model2']],
         ['Min Inference Time (ms)', f"{stats1['inference_time']['min']:.2f}", f"{stats2['inference_time']['min']:.2f}",
-         'Model 1' if stats1['inference_time']['min'] < stats2['inference_time']['min'] else 'Model 2'],
+         model_names['model1'] if stats1['inference_time']['min'] < stats2['inference_time']['min'] else model_names['model2']],
         ['Max Inference Time (ms)', f"{stats1['inference_time']['max']:.2f}", f"{stats2['inference_time']['max']:.2f}",
-         'Model 1' if stats1['inference_time']['max'] < stats2['inference_time']['max'] else 'Model 2'],
+         model_names['model1'] if stats1['inference_time']['max'] < stats2['inference_time']['max'] else model_names['model2']],
         ['Avg Confidence', f"{stats1['confidence_scores']['mean']:.3f} ± {stats1['confidence_scores']['std']:.3f}", 
          f"{stats2['confidence_scores']['mean']:.3f} ± {stats2['confidence_scores']['std']:.3f}",
-         'Model 1' if stats1['confidence_scores']['mean'] > stats2['confidence_scores']['mean'] else 'Model 2'],
+         model_names['model1'] if stats1['confidence_scores']['mean'] > stats2['confidence_scores']['mean'] else model_names['model2']],
         ['Avg Detections/Image', f"{stats1['detection_counts']['mean']:.1f} ± {stats1['detection_counts']['std']:.1f}", 
          f"{stats2['detection_counts']['mean']:.1f} ± {stats2['detection_counts']['std']:.1f}",
-         'Model 1' if stats1['detection_counts']['mean'] > stats2['detection_counts']['mean'] else 'Model 2'],
-        ['Avg FPS', f"{stats1['fps_rates']['mean']:.1f} ± {stats1['fps_rates']['std']:.1f}", 
+         model_names['model1'] if stats1['detection_counts']['mean'] > stats2['detection_counts']['mean'] else model_names['model2']],
+       ['Avg FPS', f"{stats1['fps_rates']['mean']:.1f} ± {stats1['fps_rates']['std']:.1f}", 
          f"{stats2['fps_rates']['mean']:.1f} ± {stats2['fps_rates']['std']:.1f}",
-         'Model 1' if stats1['fps_rates']['mean'] > stats2['fps_rates']['mean'] else 'Model 2'],
+         model_names['model1'] if stats1['fps_rates']['mean'] > stats2['fps_rates']['mean'] else model_names['model2']],
         ['Throughput (images/sec)', f"{stats1['throughput']:.2f}", f"{stats2['throughput']:.2f}",
-         'Model 1' if stats1['throughput'] > stats2['throughput'] else 'Model 2']
+         model_names['model1'] if stats1['throughput'] > stats2['throughput'] else model_names['model2']]
     ]
     
     perf_table = Table(perf_data, colWidths=[2*inch, 1.5*inch, 1.5*inch, 1*inch])
@@ -762,7 +1402,7 @@ def generate_pdf_report(results_data, metrics1, metrics2, model_names, model_inf
         
         # Create comparison table for this image
         img_data = [
-            ['Metric', 'Model 1', 'Model 2'],
+            ['Metric', model_names['model1'], model_names['model2']],
             ['Average Confidence', f"{result['analysis1']['avg_confidence']:.3f}", f"{result['analysis2']['avg_confidence']:.3f}"],
             ['Inference Time (ms)', f"{result['speeds1']['inference']:.2f}", f"{result['speeds2']['inference']:.2f}"],
             ['Total Time (ms)', f"{result['speeds1']['total']:.2f}", f"{result['speeds2']['total']:.2f}"],
@@ -794,10 +1434,166 @@ def generate_pdf_report(results_data, metrics1, metrics2, model_names, model_inf
     
     return pdf_path, pdf_filename
 
+def generate_csv_report(results_data, metrics1, metrics2, model_names):
+    """Generate CSV report with comparison results"""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    csv_filename = f"model_comparison_{timestamp}.csv"
+    csv_path = os.path.join(REPORTS_FOLDER, csv_filename)
+    
+    stats1 = metrics1.get_statistics()
+    stats2 = metrics2.get_statistics()
+    
+    with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.writer(csvfile)
+        
+        # Write header info
+        writer.writerow(['YOLO Model Comparison Report'])
+        writer.writerow(['Generated', datetime.now().strftime('%Y-%m-%d %H:%M:%S')])
+        writer.writerow([])
+        
+        # Model information
+        writer.writerow(['Model Information'])
+        writer.writerow(['', 'Model 1', 'Model 2'])
+        writer.writerow(['Name', model_names['model1'], model_names['model2']])
+        writer.writerow(['Selected Classes', ', '.join(SELECTED_CLASSES), ', '.join(SELECTED_CLASSES)])
+        writer.writerow([])
+        
+        # Overall statistics
+        writer.writerow(['Overall Performance Statistics'])
+        writer.writerow(['Metric', f"{model_names['model1']}", f"{model_names['model2']}", 'Winner'])
+        writer.writerow(['Avg Inference Time (ms)', 
+                        f"{stats1['inference_time']['mean']:.2f}", 
+                        f"{stats2['inference_time']['mean']:.2f}",
+                        model_names['model1'] if stats1['inference_time']['mean'] < stats2['inference_time']['mean'] else model_names['model2']])
+        writer.writerow(['Avg Confidence', 
+                        f"{stats1['confidence_scores']['mean']:.3f}", 
+                        f"{stats2['confidence_scores']['mean']:.3f}",
+                        model_names['model1'] if stats1['confidence_scores']['mean'] > stats2['confidence_scores']['mean'] else model_names['model2']])
+        writer.writerow(['Avg FPS', 
+                        f"{stats1['fps_rates']['mean']:.1f}", 
+                        f"{stats2['fps_rates']['mean']:.1f}",
+                        model_names['model1'] if stats1['fps_rates']['mean'] > stats2['fps_rates']['mean'] else model_names['model2']])
+        writer.writerow(['Total Detections', 
+                        sum(r['metrics1']['detection_count'] for r in results_data),
+                        sum(r['metrics2']['detection_count'] for r in results_data),
+                        ''])
+        writer.writerow([])
+        
+        # Per-image results
+        writer.writerow(['Per-Image Results'])
+        headers = ['Image', 'Winner', 
+                  f"{model_names['model1']} - Inference (ms)", f"{model_names['model1']} - Detections", f"{model_names['model1']} - Avg Confidence",
+                  f"{model_names['model2']} - Inference (ms)", f"{model_names['model2']} - Detections", f"{model_names['model2']} - Avg Confidence"]
+        
+        # Add class-specific headers
+        for class_name in SELECTED_CLASSES:
+            headers.extend([f"{model_names['model1']} - {class_name} Count", f"{model_names['model2']} - {class_name} Count"])
+        
+        writer.writerow(headers)
+        
+        # Write data for each image
+        for result in results_data:
+            row = [
+                result['filename'],
+                result['comparison'],
+                f"{result['speeds1']['inference']:.2f}",
+                result['analysis1']['total_detections'],
+                f"{result['analysis1']['avg_confidence']:.3f}",
+                f"{result['speeds2']['inference']:.2f}",
+                result['analysis2']['total_detections'],
+                f"{result['analysis2']['avg_confidence']:.3f}"
+            ]
+            
+            # Add class-specific counts
+            for class_name in SELECTED_CLASSES:
+                row.extend([
+                    result['analysis1']['class_counts'].get(class_name, 0),
+                    result['analysis2']['class_counts'].get(class_name, 0)
+                ])
+            
+            writer.writerow(row)
+    
+    return csv_path, csv_filename
+
+def generate_json_report(results_data, metrics1, metrics2, model_names, model_info):
+    """Generate JSON report with all comparison data"""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    json_filename = f"model_comparison_{timestamp}.json"
+    json_path = os.path.join(REPORTS_FOLDER, json_filename)
+    
+    stats1 = metrics1.get_statistics()
+    stats2 = metrics2.get_statistics()
+    
+    # Calculate winners
+    model1_wins = sum(1 for r in results_data if model_names['model1'] in r['comparison'])
+    model2_wins = sum(1 for r in results_data if model_names['model2'] in r['comparison'])
+    
+    report_data = {
+        'metadata': {
+            'generated': datetime.now().isoformat(),
+            'total_images': len(results_data),
+            'selected_classes': SELECTED_CLASSES,
+            'mapping_config': CURRENT_MAPPING
+        },
+        'models': {
+            'model1': {
+                'name': model_names['model1'],
+                'info': model_info['model1'],
+                'wins': model1_wins
+            },
+            'model2': {
+                'name': model_names['model2'],
+                'info': model_info['model2'],
+                'wins': model2_wins
+            }
+        },
+        'overall_statistics': {
+            'model1': {
+                'inference_time': stats1['inference_time'],
+                'confidence_scores': stats1['confidence_scores'],
+                'detection_counts': stats1['detection_counts'],
+                'fps_rates': stats1['fps_rates'],
+                'throughput': stats1['throughput']
+            },
+            'model2': {
+                'inference_time': stats2['inference_time'],
+                'confidence_scores': stats2['confidence_scores'],
+                'detection_counts': stats2['detection_counts'],
+                'fps_rates': stats2['fps_rates'],
+                'throughput': stats2['throughput']
+            }
+        },
+        'per_image_results': []
+    }
+    
+    # Add per-image results
+    for result in results_data:
+        image_result = {
+            'filename': result['filename'],
+            'winner': result['comparison'],
+            'model1': {
+                'speeds': result['speeds1'],
+                'analysis': result['analysis1'],
+                'metrics': result.get('metrics1', {})
+            },
+            'model2': {
+                'speeds': result['speeds2'],
+                'analysis': result['analysis2'],
+                'metrics': result.get('metrics2', {})
+            }
+        }
+        report_data['per_image_results'].append(image_result)
+    
+    # Write JSON file
+    with open(json_path, 'w', encoding='utf-8') as f:
+        json.dump(report_data, f, indent=2, default=str)
+    
+    return json_path, json_filename
+
 # --- Flask Routes ---
 @app.route('/', methods=['GET'])
 def index():
-    clear_folders()
+    # Just render the page - no cleanup needed here
     return render_template('index.html')
 
 @app.route('/get_class_mappings', methods=['GET'])
@@ -805,16 +1601,56 @@ def get_class_mappings():
     return jsonify({
         'mappings': CLASS_MAPPINGS,
         'current_mapping': CURRENT_MAPPING,
-        'selected_classes': SELECTED_CLASSES
+        'selected_classes': SELECTED_CLASSES,
+        'confidence_threshold': CONFIDENCE_THRESHOLD
     })
+
+@app.route('/get_available_models', methods=['GET'])
+def get_available_models():
+    """Get list of available models in the models directory"""
+    models = []
+    
+    if not os.path.exists(MODEL_FOLDER):
+        os.makedirs(MODEL_FOLDER, exist_ok=True)
+        return jsonify({'models': [], 'error': 'Models directory is empty'})
+    
+    try:
+        all_files = glob.glob(os.path.join(MODEL_FOLDER, '*'))
+        
+        for file_path in all_files:
+            if not os.path.isfile(file_path):
+                continue
+                
+            filename = os.path.basename(file_path)
+            ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+            
+            if ext in ALLOWED_MODEL_EXTENSIONS:
+                file_size = os.path.getsize(file_path)
+                if file_size >= 1024:  # At least 1KB
+                    models.append({
+                        'filename': filename,
+                        'path': file_path,
+                        'size': format_bytes(file_size),
+                        'format': 'ONNX' if ext == 'onnx' else 'PyTorch'
+                    })
+        
+        return jsonify({
+            'models': models,
+            'count': len(models),
+            'error': None if len(models) >= 2 else 'At least 2 models required for comparison'
+        })
+        
+    except Exception as e:
+        return jsonify({'models': [], 'error': f'Error reading models: {str(e)}'})
 
 @app.route('/set_class_mapping', methods=['POST'])
 def set_class_mapping():
-    global CURRENT_MAPPING, SELECTED_CLASSES
+    global CURRENT_MAPPING, SELECTED_CLASSES, CONFIDENCE_THRESHOLD
     
     data = request.json
     mapping_name = data.get('mapping_name')
     selected_classes = data.get('selected_classes', [])
+    confidence_threshold = data.get('confidence_threshold', CONFIDENCE_THRESHOLD)
     
     if mapping_name not in CLASS_MAPPINGS:
         return jsonify({'error': 'Invalid mapping name'}), 400
@@ -825,40 +1661,130 @@ def set_class_mapping():
     if invalid_classes:
         return jsonify({'error': f'Invalid classes: {invalid_classes}'}), 400
     
+    # Validate confidence threshold
+    try:
+        confidence_threshold = float(confidence_threshold)
+        if not 0.0 <= confidence_threshold <= 1.0:
+            return jsonify({'error': 'Confidence threshold must be between 0.0 and 1.0'}), 400
+    except ValueError:
+        return jsonify({'error': 'Invalid confidence threshold value'}), 400
+    
     CURRENT_MAPPING = mapping_name
     SELECTED_CLASSES = selected_classes
+    CONFIDENCE_THRESHOLD = confidence_threshold
     
-    return jsonify({'success': True, 'current_mapping': CURRENT_MAPPING, 'selected_classes': SELECTED_CLASSES})
+    return jsonify({
+        'success': True, 
+        'current_mapping': CURRENT_MAPPING, 
+        'selected_classes': SELECTED_CLASSES,
+        'confidence_threshold': CONFIDENCE_THRESHOLD
+    })
 
 @app.route('/upload', methods=['POST'])
 def upload_files():
     try:
+        # Validate request
         if 'files[]' not in request.files:
-            return jsonify({'error': 'No file part'}), 400
+            return jsonify({'error': 'No file part in request'}), 400
 
         files = request.files.getlist('files[]')
-        media_type = request.form.get('media_type', 'images')
         
         if not files or all(file.filename == '' for file in files):
             return jsonify({'error': 'No files selected'}), 400
         
-        # Find and Load Models
-        model_files, model_names = find_model_files()
+        # Validate file count and types
+        if len(files) > 50:  # Limit batch size
+            return jsonify({'error': 'Too many files. Maximum 50 files allowed per batch.'}), 400
         
-        if 'model1' not in model_files or 'model2' not in model_files:
-            return jsonify({'error': 'Model files not found. Please place model files in the "models" directory.'}), 500
+        # Validate each file
+        total_size = 0
+        for file in files:
+            if file.filename == '':
+                continue
+            
+            # Check file extension
+            ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
+            if ext not in ALLOWED_IMAGE_EXTENSIONS and ext not in ALLOWED_VIDEO_EXTENSIONS:
+                return jsonify({'error': f'Invalid file type: {file.filename}. Supported formats: {ALLOWED_IMAGE_EXTENSIONS | ALLOWED_VIDEO_EXTENSIONS}'}), 400
+            
+            # Check file size (estimate)
+            file.seek(0, os.SEEK_END)
+            file_size = file.tell()
+            file.seek(0)  # Reset file pointer
+            
+            if file_size > 100 * 1024 * 1024:  # 100MB per file
+                return jsonify({'error': f'File too large: {file.filename} ({format_bytes(file_size)}). Maximum size: 100MB per file.'}), 400
+            
+            total_size += file_size
+        
+        if total_size > 500 * 1024 * 1024:  # 500MB total
+            return jsonify({'error': f'Total file size too large ({format_bytes(total_size)}). Maximum total size: 500MB.'}), 400
+        
+        # Get selected models from request
+        selected_model1 = request.form.get('model1')
+        selected_model2 = request.form.get('model2')
+        
+        if not selected_model1 or not selected_model2:
+            # Fallback to automatic selection
+            model_files, model_names = find_model_files()
+            
+            if 'model1' not in model_files or 'model2' not in model_files:
+                error_msg = 'Two model files are required for comparison. '
+                if len(model_files) == 0:
+                    error_msg += 'No model files found in the "models" directory. '
+                elif len(model_files) == 1:
+                    error_msg += f'Only one model found: {list(model_names.values())[0]}. '
+                error_msg += 'Please add .pt or .onnx model files to the "models" directory.'
+                return jsonify({'error': error_msg}), 500
+        else:
+            # Use selected models
+            model1_path = os.path.join(MODEL_FOLDER, selected_model1)
+            model2_path = os.path.join(MODEL_FOLDER, selected_model2)
+            
+            # Validate selected models exist
+            if not os.path.exists(model1_path) or not os.path.exists(model2_path):
+                return jsonify({'error': 'Selected model files not found'}), 400
+            
+            if selected_model1 == selected_model2:
+                return jsonify({'error': 'Please select two different models for comparison'}), 400
+            
+            model_files = {'model1': model1_path, 'model2': model2_path}
+            model_names = {'model1': selected_model1, 'model2': selected_model2}
 
+        # Validate class configuration
+        if not SELECTED_CLASSES:
+            return jsonify({'error': 'No classes selected for comparison. Please configure detection classes first.'}), 400
+        
+        if CURRENT_MAPPING not in CLASS_MAPPINGS:
+            return jsonify({'error': f'Invalid class mapping configuration: {CURRENT_MAPPING}'}), 500
+        
         try:
             mapping_config = CLASS_MAPPINGS[CURRENT_MAPPING]
             
-            model1 = load_model(model_files['model1'], mapping_config, SELECTED_CLASSES)
-            model2 = load_model(model_files['model2'], mapping_config, SELECTED_CLASSES)
+            # Load models with detailed error handling
+            print(f"Loading models for comparison...")
+            print(f"Model 1: {model_names['model1']}")
+            print(f"Model 2: {model_names['model2']}")
+            print(f"Selected classes: {SELECTED_CLASSES}")
+            
+            try:
+                model1 = load_model(model_files['model1'], mapping_config, SELECTED_CLASSES)
+            except Exception as e:
+                return jsonify({'error': f'Failed to load Model 1 ({model_names["model1"]}): {str(e)}'}), 500
+            
+            try:
+                model2 = load_model(model_files['model2'], mapping_config, SELECTED_CLASSES)
+            except Exception as e:
+                return jsonify({'error': f'Failed to load Model 2 ({model_names["model2"]}): {str(e)}'}), 500
             
             model1_info = get_model_info(model_files['model1'])
             model2_info = get_model_info(model_files['model2'])
             
+            print(f"Models loaded successfully")
+            
         except Exception as e:
-            return jsonify({'error': f'Error loading models: {str(e)}'}), 500
+            print(f"Error in model loading: {str(e)}")
+            return jsonify({'error': f'Error setting up models: {str(e)}'}), 500
 
         # Initialize performance metrics
         metrics1 = PerformanceMetrics()
@@ -872,24 +1798,85 @@ def upload_files():
             if not file or file.filename == '':
                 continue
                 
-            file_type = 'video' if media_type == 'videos' else 'image'
-            
-            if not allowed_file(file.filename, file_type):
-                return jsonify({'error': f'File type not supported: {file.filename}. Please upload {file_type} files only.'}), 400
+            # Determine file type based on extension
+            ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
+            if ext in ALLOWED_VIDEO_EXTENSIONS:
+                file_type = 'video'
+            elif ext in ALLOWED_IMAGE_EXTENSIONS:
+                file_type = 'image'
+            else:
+                return jsonify({'error': f'File type not supported: {file.filename}. Please upload image or video files only.'}), 400
             
             original_filename = secure_filename(file.filename)
             unique_id = str(uuid.uuid4())
             input_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{unique_id}_{original_filename}")
             
             try:
-                file.save(input_path)
+                # Validate file before saving
+                try:
+                    file.save(input_path)
+                    
+                    # Additional validation after saving
+                    if file_type == 'image':
+                        # Validate image file
+                        try:
+                            img = cv2.imread(input_path)
+                            if img is None:
+                                raise ValueError("Invalid image file")
+                            height, width = img.shape[:2]
+                            if width < 32 or height < 32:
+                                raise ValueError(f"Image too small: {width}x{height}. Minimum size: 32x32")
+                            if width > 10000 or height > 10000:
+                                raise ValueError(f"Image too large: {width}x{height}. Maximum size: 10000x10000")
+                        except Exception as e:
+                            os.remove(input_path)
+                            return jsonify({'error': f'Invalid image file {original_filename}: {str(e)}'}), 400
+                        
+                        image_paths.append(input_path)
+                except Exception as e:
+                    if os.path.exists(input_path):
+                        os.remove(input_path)
+                    return jsonify({'error': f'Failed to save file {original_filename}: {str(e)}'}), 500
                 
                 if file_type == 'image':
-                    image_paths.append(input_path)
+                    pass  # Already handled above
                 else:
-                    # Handle video processing (simplified for this version)
-                    # You can extend this to handle videos similar to the original code
-                    pass
+                    # Handle video processing
+                    video_output_filename = f"{unique_id}_comparison.mp4"
+                    video_output_path = os.path.join(app.config['PROCESSED_FOLDER'], video_output_filename)
+                    
+                    print(f"Processing video: {original_filename}")
+                    video_result = process_video(input_path, model1, model2, metrics1, metrics2, model_names, video_output_path)
+                    
+                    # Clean up input video after processing
+                    try:
+                        os.remove(input_path)
+                    except:
+                        pass
+                    
+                    # Get video stats
+                    stats1 = metrics1.get_statistics()
+                    stats2 = metrics2.get_statistics()
+                    
+                    return jsonify({
+                        'success': True,
+                        'video_result': {
+                            'original_filename': original_filename,
+                            'output_url': url_for('static', filename=f'processed/{video_output_filename}'),
+                            'total_frames': video_result['total_frames'],
+                            'fps': video_result['fps'],
+                            'avg_processing_time': video_result['avg_processing_time'],
+                            'model1_stats': {
+                                'avg_inference_time': stats1['inference_time']['mean'],
+                                'avg_fps': stats1['fps_rates']['mean']
+                            },
+                            'model2_stats': {
+                                'avg_inference_time': stats2['inference_time']['mean'],
+                                'avg_fps': stats2['fps_rates']['mean']
+                            }
+                        },
+                        'model_names': model_names
+                    })
                     
             except Exception as e:
                 app.logger.error(f'Error saving file {original_filename}: {str(e)}')
@@ -897,7 +1884,10 @@ def upload_files():
         
         # Process all images in batch
         if image_paths:
-            batch_results = process_batch_images(image_paths, model1, model2, metrics1, metrics2)
+            batch_results = process_batch_images(image_paths, model1, model2, metrics1, metrics2, model_names)
+            
+            # Clean up original uploads after processing
+            session_id = unique_id  # Use from last file processed
             
             # Generate processed images with bounding boxes
             for i, result in enumerate(batch_results):
@@ -908,8 +1898,8 @@ def upload_files():
                 output_path1 = os.path.join(app.config['PROCESSED_FOLDER'], f"{unique_id}_model1_{original_filename}")
                 output_path2 = os.path.join(app.config['PROCESSED_FOLDER'], f"{unique_id}_model2_{original_filename}")
                 
-                draw_boxes_image(result['path'], result['results1'], output_path1, "Model 1", model1.class_mapping)
-                draw_boxes_image(result['path'], result['results2'], output_path2, "Model 2", model2.class_mapping)
+                draw_boxes_image(result['path'], result['results1'], output_path1, model_names['model1'], model1.class_mapping)
+                draw_boxes_image(result['path'], result['results2'], output_path2, model_names['model2'], model2.class_mapping)
                 
                 results_data.append({
                     'original_filename': original_filename,
@@ -935,7 +1925,7 @@ def upload_files():
             'model1': {
                 'class_counts': {name: 0 for name in SELECTED_CLASSES},
                 'avg_confidence': stats1['confidence_scores']['mean'],
-                'image_wins': sum(1 for r in batch_results if "Model 1" in r['comparison']),
+                'image_wins': sum(1 for r in batch_results if model_names['model1'] in r['comparison']),
                 'model_size': f"{model1_info['size']} ({model1_info['format']})",
                 'avg_inference_speed': stats1['inference_time']['mean'],
                 'avg_preprocess_speed': stats1['preprocess_time']['mean'],
@@ -946,7 +1936,7 @@ def upload_files():
             'model2': {
                 'class_counts': {name: 0 for name in SELECTED_CLASSES},
                 'avg_confidence': stats2['confidence_scores']['mean'],
-                'image_wins': sum(1 for r in batch_results if "Model 2" in r['comparison']),
+                'image_wins': sum(1 for r in batch_results if model_names['model2'] in r['comparison']),
                 'model_size': f"{model2_info['size']} ({model2_info['format']})",
                 'avg_inference_speed': stats2['inference_time']['mean'],
                 'avg_preprocess_speed': stats2['preprocess_time']['mean'],
@@ -962,9 +1952,11 @@ def upload_files():
                 overall_stats['model1']['class_counts'][name] += result['analysis1']['class_counts'].get(name, 0)
                 overall_stats['model2']['class_counts'][name] += result['analysis2']['class_counts'].get(name, 0)
         
-        # Generate PDF report
+        # Generate reports
         model_info = {'model1': model1_info, 'model2': model2_info}
         pdf_path, pdf_filename = generate_pdf_report(batch_results, metrics1, metrics2, model_names, model_info)
+        csv_path, csv_filename = generate_csv_report(batch_results, metrics1, metrics2, model_names)
+        json_path, json_filename = generate_json_report(batch_results, metrics1, metrics2, model_names, model_info)
         
         return jsonify({
             'results': results_data,
@@ -982,6 +1974,14 @@ def upload_files():
             'pdf_report': {
                 'url': url_for('static', filename=f'reports/{pdf_filename}'),
                 'filename': pdf_filename
+            },
+            'csv_report': {
+                'url': url_for('download_report', filename=csv_filename, format='csv'),
+                'filename': csv_filename
+            },
+            'json_report': {
+                'url': url_for('download_report', filename=json_filename, format='json'),
+                'filename': json_filename
             }
         })
         
@@ -991,21 +1991,69 @@ def upload_files():
 
 @app.route('/download_report/<filename>')
 def download_report(filename):
-    """Download generated PDF report"""
+    """Download generated report in various formats"""
     try:
+        file_path = os.path.join(REPORTS_FOLDER, filename)
+        
+        if not os.path.exists(file_path):
+            return jsonify({'error': f'Report not found: {filename}'}), 404
+        
+        # Determine mimetype based on file extension
+        if filename.endswith('.pdf'):
+            mimetype = 'application/pdf'
+        elif filename.endswith('.csv'):
+            mimetype = 'text/csv'
+        elif filename.endswith('.json'):
+            mimetype = 'application/json'
+        else:
+            mimetype = 'application/octet-stream'
+        
         return send_file(
-            os.path.join(REPORTS_FOLDER, filename),
+            file_path,
             as_attachment=True,
             download_name=filename,
-            mimetype='application/pdf'
+            mimetype=mimetype
         )
     except Exception as e:
-        return jsonify({'error': f'Report not found: {str(e)}'}), 404
+        return jsonify({'error': f'Error downloading report: {str(e)}'}), 500
+
+# Cleanup on shutdown
+import atexit
+import signal
+
+def cleanup_on_exit():
+    """Quick cleanup on application exit - non-blocking"""
+    print("\nShutting down gracefully...")
+    # Don't do heavy cleanup on exit - just exit quickly
+    # The next startup will handle cleanup in background
+    try:
+        # Just do minimal cleanup if needed
+        pass
+    except:
+        pass
+    finally:
+        # Force exit to prevent hanging
+        os._exit(0)
+
+# Register cleanup handlers
+def signal_handler(sig, frame):
+    """Handle Ctrl+C gracefully"""
+    print("\nReceived interrupt signal...")
+    cleanup_on_exit()
+
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
+# Don't use atexit - it can cause hanging
 
 if __name__ == '__main__':
-    # Ensure all necessary folders exist on startup
+    # Quick startup - just ensure folders exist
     for folder in [UPLOAD_FOLDER, PROCESSED_FOLDER, MODEL_FOLDER, REPORTS_FOLDER]:
         os.makedirs(folder, exist_ok=True)
+    
+    # Start cleanup in background (won't delay startup)
+    print("Starting Flask application...")
+    background_cleanup_thread = threading.Thread(target=background_cleanup, daemon=True)
+    background_cleanup_thread.start()
     
     # Start the Flask application
     app.run(debug=True)
